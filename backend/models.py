@@ -46,6 +46,11 @@ class Repository(Base):
     default_branch = Column(String, nullable=True)
     size_kb = Column(Integer, nullable=True)
 
+    last_metadata_sync = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now()

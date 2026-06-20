@@ -26,6 +26,7 @@ class RepositoryResponse(BaseModel):
     github_id: str | None = None
     default_branch: str | None = None
     size_kb: int | None = None
+    last_metadata_sync: datetime | None = None
 
     class Config:
         orm_mode = True
