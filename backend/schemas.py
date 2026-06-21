@@ -76,3 +76,44 @@ class CodeEntityResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class KnowledgeNodeResponse(BaseModel):
+    id: int
+    repository_id: int
+    entity_id: int | None = None
+    node_type: str
+    node_name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class KnowledgeEdgeResponse(BaseModel):
+    id: int
+    repository_id: int
+    source_node_id: int
+    target_node_id: int
+    relationship_type: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RepositoryGraphResponse(BaseModel):
+    nodes: list[KnowledgeNodeResponse]
+    edges: list[KnowledgeEdgeResponse]
+    architecture_hint: str | None = None
+
+
+class RepositoryArchitectureResponse(BaseModel):
+    id: int
+    repository_id: int
+    architecture_type: str
+    project_type: str
+    components: list[dict]
+    deployment_model: str | None = None
+    architecture_summary: dict
+    detected_flows: list[dict]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+

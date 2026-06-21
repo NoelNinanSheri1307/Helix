@@ -112,3 +112,71 @@ class CodeEntity(Base):
     entity_name = Column(String, nullable=False, index=True)
     line_number = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class KnowledgeNode(Base):
+    __tablename__ = "knowledge_nodes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repository_id = Column(
+        Integer,
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    entity_id = Column(
+        Integer,
+        ForeignKey("code_entities.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    node_type = Column(String, nullable=False, index=True)  # CLASS, FUNCTION, METHOD, etc.
+    node_name = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class KnowledgeEdge(Base):
+    __tablename__ = "knowledge_edges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repository_id = Column(
+        Integer,
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_node_id = Column(
+        Integer,
+        ForeignKey("knowledge_nodes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_node_id = Column(
+        Integer,
+        ForeignKey("knowledge_nodes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    relationship_type = Column(String, nullable=False, index=True)  # IMPORTS, CALLS, etc.
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class RepositoryArchitecture(Base):
+    __tablename__ = "repository_architectures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repository_id = Column(
+        Integer,
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+    architecture_type = Column(String, nullable=False)
+    project_type = Column(String, nullable=False)
+    components = Column(JSON, nullable=False, default=list)  # List of dicts representing system components
+    deployment_model = Column(String, nullable=True)
+    architecture_summary = Column(JSON, nullable=False, default=dict)  # Key-value summary of fields
+    detected_flows = Column(JSON, nullable=False, default=list)  # Inferred call/request flows
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+

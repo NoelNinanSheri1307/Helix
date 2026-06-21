@@ -61,6 +61,23 @@ class CsharpAnalyzer(BaseAnalyzer):
                 elif "ROUTE" in attr_name:
                     method = "ALL"
                 return method, path
+            
+            # Match HttpGet/HttpPost/etc. without parenthesis
+            match_no_args = re.search(r'(HttpGet|HttpPost|HttpPut|HttpDelete|HttpPatch|Route)', attr_text, re.IGNORECASE)
+            if match_no_args:
+                attr_name = match_no_args.group(1).upper()
+                method = "GET"
+                if "POST" in attr_name:
+                    method = "POST"
+                elif "PUT" in attr_name:
+                    method = "PUT"
+                elif "DELETE" in attr_name:
+                    method = "DELETE"
+                elif "PATCH" in attr_name:
+                    method = "PATCH"
+                elif "ROUTE" in attr_name:
+                    method = "ALL"
+                return method, "/"
             return None
 
         def analyze_node(node):

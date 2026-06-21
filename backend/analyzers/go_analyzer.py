@@ -87,7 +87,7 @@ class GoAnalyzer(BaseAnalyzer):
             elif node_type == "call_expression":
                 # Route registration calls: r.GET("/api/v1/users", handler)
                 text = get_node_text(node)
-                match = re.match(r'\w+\.(GET|POST|PUT|DELETE|PATCH|Use|Group)\s*\(\s*["\']([^"\']+)["\']', text, re.IGNORECASE)
+                match = re.search(r'\w+\.(GET|POST|PUT|DELETE|PATCH|Use|Group)\s*\(\s*["\']([^"\']+)["\']', text, re.IGNORECASE)
                 if match:
                     method = match.group(1).upper()
                     path = match.group(2)
@@ -98,6 +98,18 @@ class GoAnalyzer(BaseAnalyzer):
                         "path": path,
                         "method": method
                     })
+                else:
+                    match_handle = re.search(r'\w+\.(Handle|HandleFunc)\s*\(\s*(?:["\'](GET|POST|PUT|DELETE|PATCH)["\']\s*,\s*)?["\']([^"\']+)["\']', text, re.IGNORECASE)
+                    if match_handle:
+                        method = match_handle.group(2) or "ALL"
+                        path = match_handle.group(3)
+                        result["endpoints"].append({
+                            "name": f"Go Route",
+                            "line": line,
+                            "type": "ENDPOINT",
+                            "path": path,
+                            "method": method.upper()
+                        })
 
             for child in node.children:
                 analyze_node(child)

@@ -112,7 +112,7 @@ class JavascriptAnalyzer(BaseAnalyzer):
             elif node_type == "call_expression":
                 # Express route detection: app.get('/path', ...), router.post(...)
                 text = get_node_text(node)
-                match = re.match(r'(?:app|router|server)\.(get|post|put|delete|patch|use)\s*\(\s*["\']([^"\']+)["\']', text, re.IGNORECASE)
+                match = re.match(r'[a-zA-Z0-9_]+\.(get|post|put|delete|patch|use)\s*\(\s*["\']([^"\']+)["\']', text, re.IGNORECASE)
                 if match:
                     method = match.group(1).upper()
                     path = match.group(2)
@@ -136,10 +136,10 @@ class JavascriptAnalyzer(BaseAnalyzer):
                 
                 is_endpoint = False
                 for dec in decorators:
-                    match = re.match(r'@(Get|Post|Put|Delete|Patch)\s*\(\s*(?:["\']([^"\']+)["\'])?', dec, re.IGNORECASE)
+                    match = re.search(r'@(Get|Post|Put|Delete|Patch)(?:\s*\(\s*(?:["\']([^"\']+)["\'])?)?', dec, re.IGNORECASE)
                     if match:
                         method = match.group(1).upper()
-                        path = match.group(2) or "/"
+                        path = match.group(2) if len(match.groups()) > 1 and match.group(2) else "/"
                         result["endpoints"].append({
                             "name": name,
                             "line": line,

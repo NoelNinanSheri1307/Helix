@@ -235,4 +235,19 @@ class ASTAnalysisService:
             logger.error(f"Failed to merge AST analysis updates into repository/structure: {merge_exc}", exc_info=True)
             db.rollback()
 
+        # 4. Generate Knowledge Graph
+        try:
+            from graph_service import KnowledgeGraphService
+            KnowledgeGraphService.generate_graph(db, repository_id)
+        except Exception as graph_exc:
+            logger.error(f"Failed to generate knowledge graph for repo {repository_id}: {graph_exc}", exc_info=True)
+
+        # 5. Generate Architecture Intelligence
+        try:
+            from architecture_service import ArchitectureService
+            ArchitectureService.generate_architecture(db, repository_id)
+        except Exception as arch_exc:
+            logger.error(f"Failed to generate architecture intelligence for repo {repository_id}: {arch_exc}", exc_info=True)
+
         logger.info(f"[AST Analysis] Finished on repository ID: {repository_id}")
+

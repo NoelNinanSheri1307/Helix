@@ -72,6 +72,23 @@ class JavaAnalyzer(BaseAnalyzer):
                 elif "REQUEST" in ann_name:
                     method = "ALL"
                 return method, path
+            
+            # Annotation without path
+            match_no_args = re.search(r'@(GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)', ann_text, re.IGNORECASE)
+            if match_no_args:
+                ann_name = match_no_args.group(1).upper()
+                method = "GET"
+                if "POST" in ann_name:
+                    method = "POST"
+                elif "PUT" in ann_name:
+                    method = "PUT"
+                elif "DELETE" in ann_name:
+                    method = "DELETE"
+                elif "PATCH" in ann_name:
+                    method = "PATCH"
+                elif "REQUEST" in ann_name:
+                    method = "ALL"
+                return method, "/"
             return None
 
         def analyze_node(node):

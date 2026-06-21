@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 from database import Base, engine, get_db
 from github_service import RepoMetadata, validate_and_fetch_metadata
-from models import Repository, RepositoryStructure, User, CodeEntity
+from models import Repository, RepositoryStructure, User, CodeEntity, KnowledgeNode, KnowledgeEdge, RepositoryArchitecture
 from repository_clone_service import RepositoryCloneService
 from schemas import (
     RepositoryCloneResponse,
@@ -20,7 +20,12 @@ from schemas import (
     RepositoryStructureResponse,
     UserSync,
     CodeEntityResponse,
+    KnowledgeNodeResponse,
+    KnowledgeEdgeResponse,
+    RepositoryGraphResponse,
+    RepositoryArchitectureResponse,
 )
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -457,4 +462,107 @@ def get_repository_imports(
         .all()
     )
     return entities
+
+
+@app.get(
+    "/repository/{id}/graph",
+    response_model=RepositoryGraphResponse,
+)
+def get_repository_graph(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    nodes = (
+        db.query(KnowledgeNode)
+        .filter(KnowledgeNode.repository_id == repository.id)
+        .all()
+    )
+    edges = (
+        db.query(KnowledgeEdge)
+        .filter(KnowledgeEdge.repository_id == repository.id)
+        .all()
+    )
+    
+    # Retrieve architecture hint
+    arch_hint = "Standard Directory Layout"
+    struct = (
+        db.query(RepositoryStructure)
+        .filter(RepositoryStructure.repository_id == repository.id)
+        .first()
+    )
+    if struct and struct.repository_summary:
+        arch_hint = struct.repository_summary.get("architecture_hint", "Standard Directory Layout")
+        
+    return RepositoryGraphResponse(
+        nodes=nodes,
+        edges=edges,
+        architecture_hint=arch_hint,
+    )
+
+
+@app.get(
+    "/repository/{id}/graph/nodes",
+    response_model=list[KnowledgeNodeResponse],
+)
+def get_repository_graph_nodes(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    nodes = (
+        db.query(KnowledgeNode)
+        .filter(KnowledgeNode.repository_id == repository.id)
+        .order_by(KnowledgeNode.node_type, KnowledgeNode.node_name)
+        .all()
+    )
+    return nodes
+
+
+@app.get(
+    "/repository/{id}/graph/edges",
+    response_model=list[KnowledgeEdgeResponse],
+)
+def get_repository_graph_edges(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    edges = (
+        db.query(KnowledgeEdge)
+        .filter(KnowledgeEdge.repository_id == repository.id)
+        .all()
+    )
+    return edges
+
+
+@app.get(
+    "/repository/{id}/architecture",
+    response_model=RepositoryArchitectureResponse,
+)
+def get_repository_architecture(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    
+    arch = (
+        db.query(RepositoryArchitecture)
+        .filter(RepositoryArchitecture.repository_id == repository.id)
+        .first()
+    )
+    if not arch:
+        try:
+            from architecture_service import ArchitectureService
+            arch = ArchitectureService.generate_architecture(db, repository.id)
+        except Exception as exc:
+            logger.error(f"Failed to generate architecture on the fly for repo {repository.id}: {exc}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Architecture intelligence generation failed: {exc}")
+            
+    return arch
+
 

@@ -36,14 +36,20 @@ class PythonAnalyzer(BaseAnalyzer):
 
         def parse_decorator_route(decorator_node):
             text = get_node_text(decorator_node)
-            # Match @app.get("/path") or @router.post('/path') etc.
-            match = re.match(r'@\w+(?:\.\w+)?\.(get|post|put|delete|patch|route)\s*\(\s*["\']([^"\']+)["\']', text, re.IGNORECASE)
+            # Match @app.get("/path") or @router.post("/path", ...)
+            pattern = r'@(?:[a-zA-Z0-9_]+\.)*(get|post|put|delete|patch|route|options|head)\s*\(\s*(?:path\s*=\s*)?f?["\']([^"\']+)["\']'
+            match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 method = match.group(1).upper()
                 path = match.group(2)
-                return method, path
-            
-            # Django route or path (if any custom decorator is used, or fallback)
+                if method == "ROUTE":
+                    methods_match = re.search(r'methods\s*=\s*\[([^\]]+)\]', text, re.IGNORECASE)
+                    if methods_match:
+                        methods_found = re.findall(r'["\']([^"\']+)["\']', methods_match.group(1))
+                        if methods_found:
+                            return [m.upper() for m in methods_found], path
+                    return ["GET"], path
+                return [method], path
             return None
 
         def analyze_node(node, decorators=None):
@@ -100,14 +106,15 @@ class PythonAnalyzer(BaseAnalyzer):
                     for dec in decorators:
                         route_info = parse_decorator_route(dec)
                         if route_info:
-                            method, path = route_info
-                            result["endpoints"].append({
-                                "name": name,
-                                "line": line,
-                                "type": "ENDPOINT",
-                                "path": path,
-                                "method": method
-                            })
+                            methods, path = route_info
+                            for method in methods:
+                                result["endpoints"].append({
+                                    "name": name,
+                                    "line": line,
+                                    "type": "ENDPOINT",
+                                    "path": path,
+                                    "method": method
+                                })
                             is_endpoint = True
                             break
                 
@@ -121,6 +128,31 @@ class PythonAnalyzer(BaseAnalyzer):
                                 etype = "HANDLER"
                     
                     result["functions"].append({"name": name, "line": line, "type": etype})
+
+            elif node_type == "call_expression":
+                # Check for django path/re_path/url
+                if len(node.children) > 1:
+                    func_text = get_node_text(node.children[0])
+                    if func_text in ("path", "re_path", "url"):
+                        arg_list = node.children[1]
+                        if arg_list.type == "argument_list" and len(arg_list.children) > 1:
+                            first_arg = arg_list.children[1]
+                            first_arg_text = get_node_text(first_arg)
+                            if (first_arg_text.startswith("'") and first_arg_text.endswith("'")) or \
+                               (first_arg_text.startswith('"') and first_arg_text.endswith('"')):
+                                path = first_arg_text[1:-1]
+                                view_name = "Django Route"
+                                if len(arg_list.children) > 3:
+                                    view_name = get_node_text(arg_list.children[3])
+                                result["endpoints"].append({
+                                    "name": view_name,
+                                    "line": line,
+                                    "type": "ENDPOINT",
+                                    "path": path,
+                                    "method": "ALL"
+                                })
+                                if "Django" not in result["frameworks"]:
+                                    result["frameworks"].append("Django")
 
             elif node_type in ("import_statement", "import_from_statement"):
                 text = get_node_text(node)
@@ -216,3 +248,16 @@ class PythonAnalyzer(BaseAnalyzer):
                 if match:
                     name = match.group(1)
                     result["functions"].append({"name": name, "line": idx, "type": "FUNCTION"})
+            # Fallback routes
+            elif line_strip.startswith("@") and ("get(" in line_strip or "post(" in line_strip or "put(" in line_strip or "delete(" in line_strip or "patch(" in line_strip or "route(" in line_strip):
+                match = re.search(r'@(?:[a-zA-Z0-9_]+\.)*(get|post|put|delete|patch|route)\s*\(\s*["\']([^"\']+)["\']', line_strip, re.IGNORECASE)
+                if match:
+                    method = match.group(1).upper()
+                    path = match.group(2)
+                    result["endpoints"].append({
+                        "name": f"Route",
+                        "line": idx,
+                        "type": "ENDPOINT",
+                        "path": path,
+                        "method": method if method != "ROUTE" else "GET"
+                    })
