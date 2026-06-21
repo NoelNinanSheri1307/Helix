@@ -1,20 +1,50 @@
 from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
+import logging
+logger = logging.getLogger(__name__)
+
 from database import Base, engine, get_db
 from github_service import RepoMetadata, validate_and_fetch_metadata
-from models import Repository, User
-from schemas import RepositoryCreate, RepositoryResponse, UserSync
+from models import Repository, RepositoryStructure, User
+from repository_clone_service import RepositoryCloneService
+from schemas import (
+    RepositoryCloneResponse,
+    RepositoryCreate,
+    RepositoryResponse,
+    RepositoryStructureResponse,
+    UserSync,
+)
 
 Base.metadata.create_all(bind=engine)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup event: cleanup repositories stuck in CLONING
+    db = next(get_db())
+    try:
+        stuck_repos = db.query(Repository).filter(Repository.analysis_status == "CLONING").all()
+        if stuck_repos:
+            for repo in stuck_repos:
+                repo.analysis_status = "FAILED"
+                repo.status = "FAILED"
+                logger.warning(f"Repository ID {repo.id} was found in CLONING status during startup, marking as FAILED.")
+            db.commit()
+    except Exception as exc:
+        logger.error(f"Failed to clean up cloning status on startup: {exc}")
+    finally:
+        db.close()
+    yield
 
 app = FastAPI(
     title="Helix API",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -30,6 +60,11 @@ app.add_middleware(
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_request: Request, exc: HTTPException):
+    if isinstance(exc.detail, dict):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=exc.detail,
+        )
     if isinstance(exc.detail, str):
         return JSONResponse(
             status_code=exc.status_code,
@@ -46,6 +81,7 @@ def repository_from_metadata(user_id: int, metadata: RepoMetadata) -> Repository
         user_id=user_id,
         github_url=metadata.github_url,
         status="READY",
+        analysis_status="READY",
         repository_name=metadata.repository_name,
         owner=metadata.owner,
         description=metadata.description,
@@ -58,10 +94,32 @@ def repository_from_metadata(user_id: int, metadata: RepoMetadata) -> Repository
     )
 
 
+def get_owned_repository(
+    repository_id: int,
+    email: str,
+    db: Session,
+) -> Repository:
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    repository = (
+        db.query(Repository)
+        .filter(Repository.id == repository_id)
+        .first()
+    )
+    if not repository:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    if repository.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    return repository
+
+
 @app.get("/")
 def root():
     return {
         "message": "Helix Backend Running",
+        "version": "1.0.1-safe-clone"
     }
 
 
@@ -183,28 +241,30 @@ def delete_repository(
     email: str,
     db: Session = Depends(get_db),
 ):
-    user = (
-        db.query(User)
-        .filter(User.email == email)
-        .first()
-    )
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    repo = get_owned_repository(id, email, db)
 
-    repo = (
-        db.query(Repository)
-        .filter(Repository.id == id)
-        .first()
-    )
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
+    clone_deleted = False
+    try:
+        clone_deleted = RepositoryCloneService(db).delete_local_clone(repo)
+    except Exception as exc:
+        import logging
+        logging.error(f"Failed to delete local clone for repository {id}: {exc}")
 
-    if repo.user_id != user.id:
-        raise HTTPException(status_code=403, detail="Permission denied")
-
+    db.query(RepositoryStructure).filter(
+        RepositoryStructure.repository_id == repo.id
+    ).delete()
     db.delete(repo)
     db.commit()
-    return {"message": "Repository deleted successfully"}
+
+    if not clone_deleted:
+        return {
+            "success": True,
+            "warning": "Repository deleted but local clone cleanup failed."
+        }
+    return {
+        "success": True,
+        "message": "Repository deleted successfully"
+    }
 
 
 @app.post("/repository/{id}/refresh", response_model=RepositoryResponse)
@@ -213,24 +273,7 @@ def refresh_repository(
     email: str,
     db: Session = Depends(get_db),
 ):
-    user = (
-        db.query(User)
-        .filter(User.email == email)
-        .first()
-    )
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    repo = (
-        db.query(Repository)
-        .filter(Repository.id == id)
-        .first()
-    )
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
-
-    if repo.user_id != user.id:
-        raise HTTPException(status_code=403, detail="Permission denied")
+    repo = get_owned_repository(id, email, db)
 
     metadata = validate_and_fetch_metadata(repo.github_url)
 
@@ -250,4 +293,82 @@ def refresh_repository(
     db.refresh(repo)
 
     return repo
+
+
+@app.post("/repository/{id}/clone", response_model=RepositoryCloneResponse)
+def clone_repository(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    try:
+        local_path = RepositoryCloneService(db).clone_and_scan(repository)
+    except HTTPException as exc:
+        db.refresh(repository)
+        error = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "error": error,
+                "repository_id": repository.id,
+                "analysis_status": repository.analysis_status,
+            },
+        ) from exc
+    db.refresh(repository)
+    return RepositoryCloneResponse(
+        repository_id=repository.id,
+        analysis_status=repository.analysis_status,
+        local_path=str(local_path),
+        message="Repository cloned and structure scan completed successfully",
+    )
+
+
+@app.get(
+    "/repository/{id}/structure",
+    response_model=RepositoryStructureResponse,
+)
+def get_repository_structure(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    if repository.analysis_status != "CLONED":
+        raise HTTPException(
+            status_code=409,
+            detail="Repository has not been cloned",
+        )
+
+    structure = (
+        db.query(RepositoryStructure)
+        .filter(RepositoryStructure.repository_id == repository.id)
+        .first()
+    )
+    if not structure:
+        raise HTTPException(status_code=404, detail="Repository structure not found")
+
+    return RepositoryStructureResponse(
+        repository_id=repository.id,
+        directories=structure.directories,
+        files=structure.files,
+        languages=structure.languages,
+        entry_points=structure.entry_points,
+        configuration_files=structure.configuration_files,
+        config_files=structure.config_files,
+        dev_config_files=structure.dev_config_files,
+        app_config_files=structure.app_config_files,
+        documentation_files=structure.documentation_files,
+        top_level_directories=structure.top_level_directories,
+        total_files=structure.total_files,
+        total_directories=structure.total_directories,
+        repository_statistics=structure.repository_statistics,
+        frameworks=structure.frameworks,
+        dependencies=structure.dependencies,
+        repository_summary=structure.repository_summary,
+        runtimes=structure.runtimes,
+        build_tools=structure.build_tools,
+        project_type=structure.project_type,
+        scanned_at=structure.scanned_at,
+    )
 
