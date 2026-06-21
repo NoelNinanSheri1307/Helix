@@ -1,0 +1,225 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Cormorant+Garamond:ital,wght@1,400;1,600;1,700&display=swap');
+@import "tailwindcss";
+
+:root {
+  --background: #000000;
+  --foreground: #f3f3f0; /* Ivory text */
+  --foreground-silver: #a1a1aa; /* Silverish text */
+  --card: #050505;
+  --card-border: #161618;
+  
+  /* Subtle Accents */
+  --accent-gold: #dfb53b;
+  --accent-gold-hover: #ebd27e;
+  --accent-silver: #71717a;
+  --accent-blue: #2563eb;
+  --accent-purple: #6d28d9;
+}
+
+@theme {
+  --font-footlight: "Footlight MT Light", "Footlight MT", Georgia, Garamond, serif;
+  --font-cinzel: "Cinzel", Georgia, serif;
+  --font-cormorant: "Cormorant Garamond", Georgia, serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  
+  --color-gold: var(--accent-gold);
+  --color-gold-hover: var(--accent-gold-hover);
+  --color-silver: var(--accent-silver);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-purple: var(--accent-purple);
+  --color-ivory: var(--foreground);
+  --color-silverish: var(--foreground-silver);
+  
+  --background-card: var(--card);
+  --color-border-card: var(--card-border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom Base Styles */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  /* Typography Flip: Body and interface defaults to Footlight MT Light (serif) */
+  font-family: var(--font-footlight), Georgia, serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure common UI components use serif by default */
+button, input, select, textarea, span, p, a, div, li, label {
+  font-family: var(--font-footlight), Georgia, serif;
+}
+
+/* Heading Typography Flip: Headings default to sans-serif */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-sans), sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #18181b;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #27272a;
+}
+
+/* Font helpers */
+.font-logo {
+  font-family: var(--font-cinzel), serif !important;
+}
+
+.font-times {
+  font-family: "Times New Roman", Times, Baskerville, Georgia, serif !important;
+}
+
+.font-cursive {
+  font-family: var(--font-cormorant), serif !important;
+  font-style: italic;
+}
+
+.font-serif-display {
+  font-family: var(--font-footlight), Georgia, Garamond, serif !important;
+}
+
+.font-sans-ui {
+  font-family: var(--font-sans), sans-serif !important;
+}
+
+.font-mono-ui {
+  font-family: var(--font-mono), monospace !important;
+}
+
+/* Page load screen fade animation */
+@keyframes fadeInPage {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-page-fade {
+  animation: fadeInPage 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Subtle float animations */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.98);
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 4s ease-in-out infinite;
+}
+
+/* Technical Typing Animation - Responsive to prevent clipping */
+@keyframes typing {
+  from { width: 0 }
+  to { width: 100% }
+}
+
+@keyframes blink {
+  from, to { border-color: transparent }
+  50% { border-color: var(--accent-gold) }
+}
+
+.animate-typing-container {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+.animate-typing-effect {
+  display: inline-block;
+  max-width: fit-content;
+  border-right: 2px solid var(--accent-gold);
+  animation: blink 0.8s step-end infinite;
+}
+
+@media (min-width: 1024px) {
+  .animate-typing-effect {
+    overflow: hidden;
+    white-space: nowrap;
+    animation: 
+      typing 3.2s steps(35, end) forwards,
+      blink 0.8s step-end infinite;
+  }
+}
+
+/* Premium Border Accent Classes */
+.border-gold-subtle {
+  border: 1px solid rgba(223, 181, 59, 0.15);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+.border-gold-subtle:hover {
+  border-color: rgba(223, 181, 59, 0.4);
+  box-shadow: 0 0 12px rgba(223, 181, 59, 0.06);
+}
+
+.border-silver-subtle {
+  border: 1px solid rgba(113, 113, 122, 0.15);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+.border-silver-subtle:hover {
+  border-color: rgba(113, 113, 122, 0.4);
+  box-shadow: 0 0 12px rgba(113, 113, 122, 0.03);
+}
+
+.border-blue-subtle {
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+.border-blue-subtle:hover {
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.04);
+}
+
+.border-purple-subtle {
+  border: 1px solid rgba(109, 40, 217, 0.12);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+.border-purple-subtle:hover {
+  border-color: rgba(109, 40, 217, 0.35);
+  box-shadow: 0 0 12px rgba(109, 40, 217, 0.04);
+}
+
+/* Card gradients */
+.card-radial-glow {
+  background: radial-gradient(circle at top, rgba(24, 24, 27, 0.5) 0%, rgba(5, 5, 5, 1) 100%);
+}
