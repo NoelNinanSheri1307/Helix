@@ -95,3 +95,20 @@ class RepositoryStructure(Base):
     build_tools = Column(JSON, nullable=False, default=list)
     project_type = Column(String, nullable=True)
     scanned_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CodeEntity(Base):
+    __tablename__ = "code_entities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repository_id = Column(
+        Integer,
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    file_path = Column(String, nullable=False, index=True)
+    entity_type = Column(String, nullable=False, index=True)  # IMPORT, CLASS, FUNCTION, METHOD, INTERFACE, EXPORT
+    entity_name = Column(String, nullable=False, index=True)
+    line_number = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

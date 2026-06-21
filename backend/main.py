@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 from database import Base, engine, get_db
 from github_service import RepoMetadata, validate_and_fetch_metadata
-from models import Repository, RepositoryStructure, User
+from models import Repository, RepositoryStructure, User, CodeEntity
 from repository_clone_service import RepositoryCloneService
 from schemas import (
     RepositoryCloneResponse,
@@ -19,6 +19,7 @@ from schemas import (
     RepositoryResponse,
     RepositoryStructureResponse,
     UserSync,
+    CodeEntityResponse,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -371,4 +372,89 @@ def get_repository_structure(
         project_type=structure.project_type,
         scanned_at=structure.scanned_at,
     )
+
+
+@app.get(
+    "/repository/{id}/entities",
+    response_model=list[CodeEntityResponse],
+)
+def get_repository_entities(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    entities = (
+        db.query(CodeEntity)
+        .filter(CodeEntity.repository_id == repository.id)
+        .order_by(CodeEntity.file_path, CodeEntity.line_number)
+        .all()
+    )
+    return entities
+
+
+@app.get(
+    "/repository/{id}/entities/classes",
+    response_model=list[CodeEntityResponse],
+)
+def get_repository_classes(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    entities = (
+        db.query(CodeEntity)
+        .filter(
+            CodeEntity.repository_id == repository.id,
+            CodeEntity.entity_type == "CLASS",
+        )
+        .order_by(CodeEntity.file_path, CodeEntity.line_number)
+        .all()
+    )
+    return entities
+
+
+@app.get(
+    "/repository/{id}/entities/functions",
+    response_model=list[CodeEntityResponse],
+)
+def get_repository_functions(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    entities = (
+        db.query(CodeEntity)
+        .filter(
+            CodeEntity.repository_id == repository.id,
+            CodeEntity.entity_type == "FUNCTION",
+        )
+        .order_by(CodeEntity.file_path, CodeEntity.line_number)
+        .all()
+    )
+    return entities
+
+
+@app.get(
+    "/repository/{id}/entities/imports",
+    response_model=list[CodeEntityResponse],
+)
+def get_repository_imports(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    entities = (
+        db.query(CodeEntity)
+        .filter(
+            CodeEntity.repository_id == repository.id,
+            CodeEntity.entity_type == "IMPORT",
+        )
+        .order_by(CodeEntity.file_path, CodeEntity.line_number)
+        .all()
+    )
+    return entities
 

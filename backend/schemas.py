@@ -64,3 +64,15 @@ class RepositoryStructureResponse(BaseModel):
     build_tools: list[str]
     project_type: str | None = None
     scanned_at: datetime
+
+
+class CodeEntityResponse(BaseModel):
+    id: int
+    repository_id: int
+    file_path: str
+    entity_type: str
+    entity_name: str
+    line_number: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

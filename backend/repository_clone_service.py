@@ -17,6 +17,7 @@ from repository_scanner import (
     RepositoryStructureScanner,
     StructureScanResult,
 )
+from ast_analyzer import ASTAnalysisService
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,13 @@ class RepositoryCloneService:
 
             self._store_scan(repository.id, scan)
             repository.local_path = str(final_path)
+            
+            # Run AST Analysis
+            try:
+                ASTAnalysisService.analyze_repository(self.db, repository.id, str(final_path))
+            except Exception as ast_exc:
+                logger.error(f"AST Analysis failed for repository {repository.id}: {ast_exc}", exc_info=True)
+
             repository.analysis_status = "CLONED"
             repository.status = "CLONED"
             repository.framework = scan.repository_statistics.get("framework", "Unknown")
