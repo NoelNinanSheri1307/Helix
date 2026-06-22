@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { Search, Bell, ChevronDown, User, LogOut, Settings, Menu } from 'lucide-react';
+import { Search, ChevronDown, User, LogOut, Settings, Menu } from 'lucide-react';
 import { useSession, signOut } from "next-auth/react";
 import { useSidebar } from '../context/SidebarContext';
 
@@ -64,12 +64,6 @@ export const TopBar: React.FC = () => {
             className="w-full bg-zinc-950 border border-zinc-900 rounded-md py-1.5 pl-10 pr-4 text-xs text-ivory placeholder-zinc-500 focus:outline-none focus:border-zinc-800 transition-colors"
           />
         </div>
-
-        {/* Mock Notifications */}
-        <button className="text-zinc-500 hover:text-ivory transition-colors relative" title="Notifications">
-          <Bell size={18} />
-          <span className="absolute top-0 right-0 w-1.5 h-1.5 bg-gold rounded-full" />
-        </button>
 
         {/* User Dropdown */}
         {user && (

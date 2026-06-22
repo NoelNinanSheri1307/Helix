@@ -351,3 +351,47 @@ export async function getRepositoryFlowDetail(
   }
   return body as ExecutionFlow;
 }
+
+export interface OnboardingSection {
+  heading: string;
+  content: string;
+}
+
+export interface OnboardingDocument {
+  document_type: string;
+  generated_content: {
+    title: string;
+    sections: OnboardingSection[];
+  };
+  generated_at: string | null;
+  version: number;
+}
+
+export async function getRepositoryOnboarding(
+  id: string,
+  email: string
+): Promise<Record<string, OnboardingDocument>> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/onboarding?email=${encodeURIComponent(email)}`
+  );
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(mapApiError(body));
+  }
+  return body as Record<string, OnboardingDocument>;
+}
+
+export async function regenerateRepositoryOnboarding(
+  id: string,
+  email: string
+): Promise<Record<string, OnboardingDocument>> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/onboarding/regenerate?email=${encodeURIComponent(email)}`,
+    { method: "POST" }
+  );
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(mapApiError(body));
+  }
+  return body as Record<string, OnboardingDocument>;
+}

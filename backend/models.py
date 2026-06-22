@@ -231,3 +231,19 @@ class FlowStep(Base):
     node_type = Column(String, nullable=True)
 
 
+class OnboardingDocument(Base):
+    __tablename__ = "onboarding_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repository_id = Column(
+        Integer,
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_type = Column(String, nullable=False, index=True)  # LEVEL_1, LEVEL_2, etc.
+    generated_content = Column(JSON, nullable=False)  # JSON holding level-specific onboarding documents
+    generated_at = Column(DateTime(timezone=True), server_default=func.now())
+    version = Column(Integer, nullable=False, default=1)
+
+

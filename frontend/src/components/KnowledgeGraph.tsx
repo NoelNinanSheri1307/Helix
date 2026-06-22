@@ -206,7 +206,6 @@ export function KnowledgeGraph({ nodes, edges, architectureHint, repositoryName,
             .header-container { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #18181b; padding-bottom: 10px; margin-bottom: 20px; }
             .logo-section { display: flex; align-items: center; gap: 8px; background: #09090b; padding: 4px 12px; border-radius: 4px; }
             .logo-img { height: 26px; width: auto; object-fit: contain; }
-            .logo-text { font-size: 18px; font-weight: bold; letter-spacing: 0.08em; color: #ffffff; }
             .meta-section { text-align: right; font-size: 11px; color: #52525b; line-height: 1.3; }
             h1 { font-size: 20px; font-weight: bold; margin-top: 10px; margin-bottom: 24px; text-transform: uppercase; letter-spacing: 0.02em; }
             h2 { font-size: 15px; font-weight: bold; margin-top: 32px; border-bottom: 1px solid #e4e4e7; padding-bottom: 6px; }
@@ -225,8 +224,7 @@ export function KnowledgeGraph({ nodes, edges, architectureHint, repositoryName,
         <body>
           <div class="header-container">
             <div class="logo-section">
-              <img src="${logoUrl}" alt="Helix White Logo" class="logo-img" />
-              <span class="logo-text">Helix White</span>
+              <img src="${logoUrl}" alt="Helix Logo" class="logo-img" />
             </div>
             <div class="meta-section">
               <div>Helix Knowledge Map</div>

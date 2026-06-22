@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 from database import Base, engine, get_db
 from github_service import RepoMetadata, validate_and_fetch_metadata
-from models import Repository, RepositoryStructure, User, CodeEntity, KnowledgeNode, KnowledgeEdge, RepositoryArchitecture, ExecutionFlow, FlowStep
+from models import Repository, RepositoryStructure, User, CodeEntity, KnowledgeNode, KnowledgeEdge, RepositoryArchitecture, ExecutionFlow, FlowStep, OnboardingDocument
 from repository_clone_service import RepositoryCloneService
 from schemas import (
     RepositoryCloneResponse,
@@ -27,6 +27,7 @@ from schemas import (
     CallGraphResponse,
     FlowStepResponse,
     ExecutionFlowResponse,
+    OnboardingDocumentResponse,
 )
 
 
@@ -747,6 +748,62 @@ def get_repository_flow_detail(
         .all()
     )
     return flow
+
+
+@app.get(
+    "/repository/{id}/onboarding",
+    response_model=dict[str, OnboardingDocumentResponse],
+)
+def get_repository_onboarding(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    from onboarding_service import OnboardingService
+    return OnboardingService.get_or_generate_onboarding(db, repository.id)
+
+
+@app.post(
+    "/repository/{id}/onboarding/regenerate",
+    response_model=dict[str, OnboardingDocumentResponse],
+)
+def regenerate_repository_onboarding(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    from onboarding_service import OnboardingService
+    return OnboardingService.generate_onboarding(db, repository.id)
+
+
+@app.get(
+    "/repository/{id}/onboarding/{document_type}",
+    response_model=OnboardingDocumentResponse,
+)
+def get_repository_onboarding_by_type(
+    id: int,
+    document_type: str,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    doc = (
+        db.query(OnboardingDocument)
+        .filter(
+            OnboardingDocument.repository_id == repository.id,
+            OnboardingDocument.document_type == document_type,
+        )
+        .order_by(OnboardingDocument.version.desc())
+        .first()
+    )
+    if not doc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Onboarding document of type {document_type} not found",
+        )
+    return doc
 
 
 

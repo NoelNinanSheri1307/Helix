@@ -102,6 +102,18 @@ alter_statements = [
     );
     """,
     "CREATE INDEX IF NOT EXISTS ix_flow_steps_flow_id ON flow_steps(flow_id);",
+    """
+    CREATE TABLE IF NOT EXISTS onboarding_documents (
+        id SERIAL PRIMARY KEY,
+        repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+        document_type VARCHAR NOT NULL,
+        generated_content JSON NOT NULL DEFAULT '{}',
+        generated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        version INTEGER NOT NULL DEFAULT 1
+    );
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_onboarding_documents_repository_id ON onboarding_documents(repository_id);",
+    "CREATE INDEX IF NOT EXISTS ix_onboarding_documents_document_type ON onboarding_documents(document_type);",
 ]
 
 with engine.connect() as conn:

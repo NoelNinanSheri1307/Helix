@@ -157,3 +157,12 @@ class ExecutionFlowResponse(BaseModel):
     steps: list[FlowStepResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class OnboardingDocumentResponse(BaseModel):
+    document_type: str
+    generated_content: dict
+    generated_at: str | None = None
+    version: int
+
+    model_config = ConfigDict(from_attributes=True)

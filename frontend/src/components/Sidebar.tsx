@@ -1,11 +1,16 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, FolderGit, BookOpen, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+  LayoutDashboard, FolderGit, GraduationCap, Layers, Workflow, 
+  Settings, LogOut, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, GitBranch 
+} from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
 import { useSidebar } from '../context/SidebarContext';
+import { getRepositories } from '../lib/api';
+import { Repository } from '../types';
 
 export const Sidebar: React.FC = () => {
   const pathname = usePathname();
@@ -13,27 +18,52 @@ export const Sidebar: React.FC = () => {
   const user = session?.user;
   const [imgError, setImgError] = useState(false);
   const { isMobileOpen, setMobileOpen, isCollapsed, setCollapsed } = useSidebar();
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [reposExpanded, setReposExpanded] = useState(true);
+
+  // Fetch repositories list on mount or email change
+  useEffect(() => {
+    if (user?.email) {
+      getRepositories(user.email)
+        .then(list => {
+          setRepositories(list);
+        })
+        .catch(err => {
+          console.error("Failed to load sidebar repositories", err);
+        });
+    }
+  }, [user?.email]);
 
   const navItems = [
     {
-      name: "Dashboard",
+      name: "Overview",
       href: "/dashboard",
       icon: LayoutDashboard
     },
     {
       name: "Repositories",
       href: "/repositories",
-      icon: FolderGit
+      icon: FolderGit,
+      isRepos: true
     },
     {
-      name: "Documentation",
-      href: "#documentation",
-      icon: BookOpen,
-      disabled: true
+      name: "Developer Onboarding",
+      href: "/onboarding",
+      icon: GraduationCap
+    },
+    {
+      name: "Architecture Intelligence",
+      href: "/architecture",
+      icon: Layers
+    },
+    {
+      name: "Execution Flows",
+      href: "/flows",
+      icon: Workflow
     },
     {
       name: "Settings",
-      href: "#settings",
+      href: "/settings",
       icon: Settings,
       disabled: true
     }
@@ -70,7 +100,7 @@ export const Sidebar: React.FC = () => {
             </span>
           </Link>
           
-          {/* Collapse Toggle Button (visible only on desktop/tablet) */}
+          {/* Collapse Toggle Button */}
           <button
             onClick={() => setCollapsed(!isCollapsed)}
             className="hidden md:flex items-center justify-center p-1 rounded border border-zinc-900 hover:border-zinc-800 text-zinc-500 hover:text-ivory bg-zinc-950/20 cursor-pointer transition-colors outline-none"
@@ -109,22 +139,60 @@ export const Sidebar: React.FC = () => {
             }
 
             return (
-              <Link
-                key={item.name}
-                href={item.href}
-                onClick={() => setMobileOpen(false)} // Close drawer on link click
-                className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-md transition-all duration-200 ${isActive
-                  ? 'bg-zinc-950 text-gold border border-gold/10'
-                  : 'text-zinc-400 hover:text-ivory hover:bg-zinc-950/50 border border-transparent'
-                  }`}
-              >
-                <Icon size={18} className={`flex-shrink-0 ${isActive ? 'text-gold' : 'text-zinc-500'}`} />
-                <span className={`truncate transition-all duration-200 ${
-                  isCollapsed ? 'md:hidden lg:inline' : 'md:hidden lg:inline'
-                }`}>
-                  {item.name}
-                </span>
-              </Link>
+              <div key={item.name} className="flex flex-col">
+                <div className="flex items-center justify-between w-full">
+                  <Link
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)} // Close drawer on link click
+                    className={`flex-1 flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-md transition-all duration-200 ${isActive
+                      ? 'bg-zinc-950 text-gold border border-gold/10'
+                      : 'text-zinc-400 hover:text-ivory hover:bg-zinc-950/50 border border-transparent'
+                      }`}
+                  >
+                    <Icon size={18} className={`flex-shrink-0 ${isActive ? 'text-gold' : 'text-zinc-500'}`} />
+                    <span className={`truncate transition-all duration-200 ${
+                      isCollapsed ? 'md:hidden lg:inline' : 'md:hidden lg:inline'
+                    }`}>
+                      {item.name}
+                    </span>
+                  </Link>
+
+                  {item.isRepos && !isCollapsed && repositories.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setReposExpanded(!reposExpanded)}
+                      className="px-2 py-2 text-zinc-550 hover:text-ivory cursor-pointer outline-none transition-colors"
+                      title={reposExpanded ? "Collapse Repository List" : "Expand Repository List"}
+                    >
+                      {reposExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+                  )}
+                </div>
+
+                {/* Collapsible tree of repositories */}
+                {item.isRepos && reposExpanded && !isCollapsed && repositories.length > 0 && (
+                  <div className="pl-4 mt-1 border-l border-zinc-900 ml-5 space-y-1">
+                    {repositories.map(repo => {
+                      const isRepoActive = pathname === `/repositories/${repo.id}`;
+                      return (
+                        <Link
+                          key={repo.id}
+                          href={`/repositories/${repo.id}`}
+                          onClick={() => setMobileOpen(false)}
+                          className={`flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded transition-all duration-200 truncate ${
+                            isRepoActive
+                              ? 'text-gold bg-zinc-950 border border-gold/10'
+                              : 'text-zinc-500 hover:text-zinc-355 hover:bg-zinc-950/20 border border-transparent'
+                          }`}
+                        >
+                          <GitBranch size={11} className={isRepoActive ? 'text-gold shrink-0' : 'text-zinc-700 shrink-0'} />
+                          <span className="truncate">{repo.name}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
