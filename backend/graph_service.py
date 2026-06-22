@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class KnowledgeGraphService:
     @staticmethod
-    def generate_graph(db: Session, repository_id: int) -> None:
+    def generate_graph(db: Session, repository_id: int, all_calls: list = None) -> None:
         logger.info(f"[Graph Generation] Starting for repository ID: {repository_id}")
         
         # 1. Clear old graph elements
@@ -101,7 +101,28 @@ class KnowledgeGraphService:
         # 4. Resolve Relationships (Edges)
         edges = []
 
-        # Read source files on disk to build high-fidelity calls/dependencies
+        # Load all nodes and entities for lookup
+        nodes = db.query(KnowledgeNode).filter(KnowledgeNode.repository_id == repository_id).all()
+        entity_by_id = {e.id: e for e in entities}
+        imports_by_file = {}
+        for ent in entities:
+            if ent.entity_type == "IMPORT":
+                imports_by_file.setdefault(ent.file_path, []).append(ent)
+
+        entities_in_file = {}
+        for ent in entities:
+            if ent.entity_type in ("FUNCTION", "METHOD", "ENDPOINT", "HANDLER", "HOOK", "COMPONENT"):
+                entities_in_file.setdefault(ent.file_path, []).append(ent)
+                
+        for path in entities_in_file:
+            entities_in_file[path].sort(key=lambda x: x.line_number)
+
+        # Group nodes by name for fast lookup
+        nodes_by_name = {}
+        for n in nodes:
+            nodes_by_name.setdefault(n.node_name, []).append(n)
+
+        # A. Resolve structural calls/dependencies from files
         for file_path, items in file_entities.items():
             full_file_path = local_path / file_path
             if not full_file_path.exists():
@@ -124,36 +145,6 @@ class KnowledgeGraphService:
                 block_lines = code_lines[start_line-1:end_line]
                 block_text = "\n".join(block_lines)
 
-                # Check references to other node names in the same repository
-                for target_name, target_node in node_by_name.items():
-                    if target_node.id == node.id:
-                        continue
-                    
-                    # Word boundary match to ensure accuracy
-                    if re.search(r'\b' + re.escape(target_name) + r'\b', block_text):
-                        # Determine relationship type
-                        rel = "USES"
-                        
-                        if node.node_type in ("CLASS", "WIDGET", "COMPONENT") and target_node.node_type in ("CLASS", "WIDGET", "COMPONENT"):
-                            rel = "USES"
-                        elif target_node.node_type in ("FUNCTION", "METHOD"):
-                            rel = "CALLS"
-                        elif node.node_type in ("SERVICE", "CONTROLLER") and target_node.node_type == "REPOSITORY":
-                            rel = "USES"
-                        elif node.node_type == "CONTROLLER" and target_node.node_type == "SERVICE":
-                            rel = "USES"
-                        
-                        # Avoid duplicates
-                        edge_exists = any(e.source_node_id == node.id and e.target_node_id == target_node.id and e.relationship_type == rel for e in edges)
-                        if not edge_exists:
-                            edge = KnowledgeEdge(
-                                repository_id=repository_id,
-                                source_node_id=node.id,
-                                target_node_id=target_node.id,
-                                relationship_type=rel
-                            )
-                            edges.append(edge)
-
                 # Check database relationships
                 for db_node in db_nodes:
                     db_keywords_regex = r'\b(db|postgres|sql|mongo|redis|query|gorm|hibernate|jpa|model)\b'
@@ -171,7 +162,7 @@ class KnowledgeGraphService:
                 header_line = code_lines[start_line-1] if start_line-1 < len(code_lines) else ""
                 extends_match = re.search(r'\b(extends|implements|with|\:)\s+([\w\s,<>\?]+)', header_line)
                 if extends_match:
-                    parent_names = extends_clause = extends_match.group(2)
+                    parent_names = extends_match.group(2)
                     for target_name, target_node in node_by_name.items():
                         if target_name in parent_names:
                             rel_type = "IMPLEMENTS" if "implements" in extends_match.group(1) else "EXTENDS"
@@ -204,7 +195,6 @@ class KnowledgeGraphService:
             for cl_ent, cl_node in classes:
                 for m_ent, m_node in methods:
                     # If method is structurally in the class range
-                    # Check list range
                     if cl_ent.line_number < m_ent.line_number:
                         # Find next class line
                         next_cl = [x for x in classes if x[0].line_number > cl_ent.line_number]
@@ -216,6 +206,101 @@ class KnowledgeGraphService:
                                 relationship_type="CONTAINS"
                             )
                             edges.append(edge)
+
+        # B. Resolve AST call graph calls
+        for call in (all_calls or []):
+            file_path = call["file_path"]
+            line = call["line"]
+            caller_str = call["caller"]
+            callee_str = call["callee"]
+            call_type = call["type"] # CALLS, INVOKES, CREATES, ROUTES_TO
+            
+            # Resolve caller node matching the line number
+            file_ents = entities_in_file.get(file_path, [])
+            caller_ent = None
+            for ent in file_ents:
+                if ent.line_number <= line:
+                    caller_ent = ent
+                else:
+                    break
+                    
+            if not caller_ent:
+                continue
+                
+            source_node = node_by_entity_id.get(caller_ent.id)
+            if not source_node:
+                continue
+                
+            # Resolve target node from repository entities
+            callee_clean = callee_str.replace("await ", "").strip()
+            
+            parts = callee_clean.split(".")
+            base_name = parts[-1].split("(")[0].strip()
+            prefix = parts[0] if len(parts) > 1 else None
+            
+            candidates = []
+            
+            if call_type == "CREATES":
+                class_matches = nodes_by_name.get(base_name, [])
+                for n in class_matches:
+                    if n.node_type in ("CLASS", "MODEL", "ENTITY", "DTO", "INTERFACE"):
+                        candidates.append((n, 0.95))
+            else:
+                method_matches = nodes_by_name.get(base_name, [])
+                if prefix:
+                    method_matches.extend(nodes_by_name.get(f"{prefix}.{base_name}", []))
+                    
+                for n in method_matches:
+                    if n.node_type in ("FUNCTION", "METHOD", "ENDPOINT"):
+                        confidence = 0.7
+                        n_ent = entity_by_id.get(n.entity_id) if n.entity_id else None
+                        
+                        if n_ent:
+                            if n_ent.file_path == file_path:
+                                confidence = 0.95
+                            else:
+                                imports = imports_by_file.get(file_path, [])
+                                is_imported = any(base_name in imp.entity_name or (n_ent.file_path.split("/")[-1].split(".")[0] in imp.entity_name) for imp in imports)
+                                if is_imported:
+                                    confidence = 0.9
+                                    
+                        if prefix and n_ent and n.node_type == "METHOD":
+                            class_name = n_ent.entity_name.split(".")[0] if "." in n_ent.entity_name else None
+                            if class_name:
+                                if class_name.lower() == prefix.lower() or prefix.lower() in class_name.lower():
+                                    confidence = max(confidence, 0.92)
+                                    
+                        candidates.append((n, confidence))
+                        
+            target_node = None
+            confidence = 1.0
+            
+            if candidates:
+                candidates.sort(key=lambda x: x[1], reverse=True)
+                target_node, confidence = candidates[0]
+            else:
+                confidence = 0.5 # lower confidence score for external calls
+                
+            edge_exists = any(
+                e.source_node_id == source_node.id and 
+                e.target_node_id == (target_node.id if target_node else None) and 
+                e.relationship_type == call_type and 
+                e.line_number == line
+                for e in edges
+            )
+            if not edge_exists:
+                edge = KnowledgeEdge(
+                    repository_id=repository_id,
+                    source_node_id=source_node.id,
+                    target_node_id=target_node.id if target_node else None,
+                    relationship_type=call_type,
+                    caller_name=caller_ent.entity_name,
+                    callee_name=callee_clean,
+                    line_number=line,
+                    file_path=file_path,
+                    confidence_score=confidence
+                )
+                edges.append(edge)
 
         # Batch write edges to DB
         for edge in edges:

@@ -11,13 +11,19 @@ class DartAnalyzer(BaseAnalyzer):
             "imports": [],
             "endpoints": [],
             "frameworks": [],
-            "dependencies": []
+            "dependencies": [],
+            "calls": []
         }
 
         text = code_bytes.decode('utf-8', errors='ignore')
         lines = text.splitlines()
 
         in_multiline_comment = False
+        current_class = None
+        current_function = None
+        class_brace_depth = -1
+        func_brace_depth = -1
+        brace_depth = 0
 
         for idx, line in enumerate(lines, 1):
             line_strip = line.strip()
@@ -33,6 +39,32 @@ class DartAnalyzer(BaseAnalyzer):
                 continue
             if line_strip.startswith("//"):
                 continue
+
+            # Parse calls inside function bodies
+            if current_function and brace_depth > func_brace_depth:
+                calls_found = re.findall(r'\b([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*)\s*\(', line_strip)
+                for callee in calls_found:
+                    if callee in ("if", "for", "while", "switch", "catch", "super", "print", "Widget", "void", "dynamic", "await", "return"):
+                        continue
+                    
+                    call_type = "CALLS"
+                    if "." in callee:
+                        call_type = "INVOKES"
+                    
+                    callee_base = callee.split(".")[-1]
+                    if callee_base and callee_base[0].isupper() and callee_base != current_class:
+                        call_type = "CREATES"
+                        
+                    caller_name = current_function
+                    if current_class:
+                        caller_name = f"{current_class}.{current_function}"
+                        
+                    result["calls"].append({
+                        "caller": caller_name,
+                        "callee": callee,
+                        "line": idx,
+                        "type": call_type
+                    })
 
             # 1. Detect Imports
             if line_strip.startswith("import ") or line_strip.startswith("export "):
@@ -82,6 +114,9 @@ class DartAnalyzer(BaseAnalyzer):
                         "type": etype
                     })
 
+                    current_class = class_name
+                    class_brace_depth = brace_depth
+
             # 3. Detect Functions / Methods
             elif "(" in line_strip and ")" in line_strip and "{" in line_strip and not any(k in line_strip for k in ["class ", "if ", "for ", "while ", "switch ", "catch "]):
                 # Match method definition e.g. Widget build(BuildContext context) or void init()
@@ -94,6 +129,8 @@ class DartAnalyzer(BaseAnalyzer):
                             "line": idx,
                             "type": "METHOD"
                         })
+                        current_function = func_name
+                        func_brace_depth = brace_depth
 
             # 4. Route / Endpoint Detection
             # Static routeName in widgets or mapping: e.g. static const String routeName = '/login';
@@ -108,6 +145,15 @@ class DartAnalyzer(BaseAnalyzer):
                         "path": route_path,
                         "method": "ROUTE"
                     })
+
+            # Update brace depth
+            brace_depth += line_strip.count("{") - line_strip.count("}")
+            if brace_depth <= func_brace_depth:
+                current_function = None
+                func_brace_depth = -1
+            if brace_depth <= class_brace_depth:
+                current_class = None
+                class_brace_depth = -1
 
         # Deduplicate frameworks
         result["frameworks"] = list(set(result["frameworks"]))

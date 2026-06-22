@@ -12,7 +12,8 @@ class PythonAnalyzer(BaseAnalyzer):
             "imports": [],
             "endpoints": [],
             "frameworks": [],
-            "dependencies": []
+            "dependencies": [],
+            "calls": []
         }
 
         try:
@@ -24,6 +25,7 @@ class PythonAnalyzer(BaseAnalyzer):
             return result
 
         current_class = None
+        current_function = None
 
         def get_node_text(node):
             return node.text.decode('utf-8', errors='ignore').strip()
@@ -53,7 +55,7 @@ class PythonAnalyzer(BaseAnalyzer):
             return None
 
         def analyze_node(node, decorators=None):
-            nonlocal current_class
+            nonlocal current_class, current_function
             node_type = node.type
             line = node.start_point[0] + 1
 
@@ -129,7 +131,39 @@ class PythonAnalyzer(BaseAnalyzer):
                     
                     result["functions"].append({"name": name, "line": line, "type": etype})
 
-            elif node_type == "call_expression":
+                # Recursively parse with function context
+                old_func = current_function
+                current_function = name
+                for child in node.children:
+                    analyze_node(child)
+                current_function = old_func
+                return
+
+            elif node_type in ("call_expression", "call"):
+                if len(node.children) > 0:
+                    func_node = node.children[0]
+                    func_text = get_node_text(func_node)
+                    
+                    caller_name = current_function
+                    if current_class and current_function:
+                        caller_name = f"{current_class}.{current_function}"
+                    
+                    call_type = "CALLS"
+                    if "." in func_text:
+                        call_type = "INVOKES"
+                    
+                    # Heuristic for class creation in Python: Callee name starts with uppercase
+                    callee_base = func_text.split(".")[-1]
+                    if callee_base and callee_base[0].isupper():
+                        call_type = "CREATES"
+                        
+                    result["calls"].append({
+                        "caller": caller_name,
+                        "callee": func_text,
+                        "line": line,
+                        "type": call_type
+                    })
+
                 # Check for django path/re_path/url
                 if len(node.children) > 1:
                     func_text = get_node_text(node.children[0])

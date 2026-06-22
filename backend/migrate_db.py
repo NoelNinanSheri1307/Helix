@@ -65,6 +65,12 @@ alter_statements = [
     );
     """,
     "CREATE INDEX IF NOT EXISTS ix_repository_structures_repository_id ON repository_structures(repository_id);",
+    "ALTER TABLE knowledge_edges ADD COLUMN IF NOT EXISTS caller_name VARCHAR;",
+    "ALTER TABLE knowledge_edges ADD COLUMN IF NOT EXISTS callee_name VARCHAR;",
+    "ALTER TABLE knowledge_edges ADD COLUMN IF NOT EXISTS line_number INTEGER;",
+    "ALTER TABLE knowledge_edges ADD COLUMN IF NOT EXISTS file_path VARCHAR;",
+    "ALTER TABLE knowledge_edges ADD COLUMN IF NOT EXISTS confidence_score DOUBLE PRECISION;",
+    "ALTER TABLE knowledge_edges ALTER COLUMN target_node_id DROP NOT NULL;",
 ]
 
 with engine.connect() as conn:

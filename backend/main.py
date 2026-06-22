@@ -24,6 +24,7 @@ from schemas import (
     KnowledgeEdgeResponse,
     RepositoryGraphResponse,
     RepositoryArchitectureResponse,
+    CallGraphResponse,
 )
 
 
@@ -564,5 +565,83 @@ def get_repository_architecture(
             raise HTTPException(status_code=500, detail=f"Architecture intelligence generation failed: {exc}")
             
     return arch
+
+
+@app.get(
+    "/repository/{id}/callgraph",
+    response_model=CallGraphResponse,
+)
+def get_repository_call_graph(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    
+    nodes = (
+        db.query(KnowledgeNode)
+        .filter(KnowledgeNode.repository_id == repository.id)
+        .all()
+    )
+    
+    edges = (
+        db.query(KnowledgeEdge)
+        .filter(
+            KnowledgeEdge.repository_id == repository.id,
+            KnowledgeEdge.relationship_type.in_(["CALLS", "INVOKES", "CREATES", "ROUTES_TO"])
+        )
+        .all()
+    )
+    
+    adj = {}
+    in_degree = {}
+    node_name_by_id = {n.id: n.node_name for n in nodes}
+    
+    for edge in edges:
+        src = edge.source_node_id
+        tgt = edge.target_node_id
+        if src and tgt:
+            adj.setdefault(src, []).append(tgt)
+            in_degree[tgt] = in_degree.get(tgt, 0) + 1
+            if src not in in_degree:
+                in_degree[src] = 0
+
+    roots = [node_id for node_id, deg in in_degree.items() if deg == 0]
+    
+    if not roots and adj:
+        roots = list(adj.keys())
+        
+    call_chains = []
+    
+    def dfs(node_id, current_path, visited):
+        node_name = node_name_by_id.get(node_id, f"Node-{node_id}")
+        new_path = current_path + [node_name]
+        
+        if node_id in visited or len(new_path) >= 5:
+            call_chains.append(new_path)
+            return
+            
+        neighbors = adj.get(node_id, [])
+        if not neighbors:
+            call_chains.append(new_path)
+            return
+            
+        new_visited = visited | {node_id}
+        for neighbor in neighbors:
+            dfs(neighbor, new_path, new_visited)
+
+    for root in roots:
+        dfs(root, [], set())
+        
+    unique_chains = []
+    for chain in call_chains:
+        if chain not in unique_chains:
+            unique_chains.append(chain)
+            
+    return CallGraphResponse(
+        nodes=nodes,
+        edges=edges,
+        call_chains=unique_chains,
+    )
 
 

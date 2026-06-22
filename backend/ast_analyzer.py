@@ -74,6 +74,7 @@ class ASTAnalysisService:
         aggregated_runtimes = set()
         aggregated_build_tools = set()
         aggregated_project_types = set()
+        all_calls = []
 
         # 2. Walk files and analyze
         for root, dirs, files in os.walk(local_path, followlinks=False):
@@ -159,6 +160,16 @@ class ASTAnalysisService:
                         )
                         db.add(entity)
 
+                    # Collect calls
+                    for item in analysis.get("calls", []):
+                        all_calls.append({
+                            "file_path": relative_path,
+                            "caller": item.get("caller"),
+                            "callee": item.get("callee"),
+                            "line": item.get("line"),
+                            "type": item.get("type", "CALLS")
+                        })
+
                     db.commit()
 
                 except Exception as exc:
@@ -238,7 +249,7 @@ class ASTAnalysisService:
         # 4. Generate Knowledge Graph
         try:
             from graph_service import KnowledgeGraphService
-            KnowledgeGraphService.generate_graph(db, repository_id)
+            KnowledgeGraphService.generate_graph(db, repository_id, all_calls)
         except Exception as graph_exc:
             logger.error(f"Failed to generate knowledge graph for repo {repository_id}: {graph_exc}", exc_info=True)
 

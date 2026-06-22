@@ -12,7 +12,8 @@ class BaseAnalyzer:
           "imports": [{"name": str, "line": int}],
           "endpoints": [{"name": str, "line": int, "type": str, "path": str, "method": str}],
           "frameworks": [str],
-          "dependencies": [str]
+          "dependencies": [str],
+          "calls": [{"caller": str | None, "callee": str, "line": int, "type": str}]
         }
         """
         return {
@@ -21,5 +22,7 @@ class BaseAnalyzer:
             "imports": [],
             "endpoints": [],
             "frameworks": [],
-            "dependencies": []
+            "dependencies": [],
+            "calls": []
         }
+

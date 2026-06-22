@@ -91,8 +91,13 @@ export interface KnowledgeEdge {
   id: number;
   repository_id: number;
   source_node_id: number;
-  target_node_id: number;
+  target_node_id: number | null;
   relationship_type: string;
+  caller_name?: string | null;
+  callee_name?: string | null;
+  line_number?: number | null;
+  file_path?: string | null;
+  confidence_score?: number | null;
 }
 
 export interface RepositoryGraph {

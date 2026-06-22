@@ -154,10 +154,17 @@ class KnowledgeEdge(Base):
     target_node_id = Column(
         Integer,
         ForeignKey("knowledge_nodes.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     relationship_type = Column(String, nullable=False, index=True)  # IMPORTS, CALLS, etc.
+    
+    caller_name = Column(String, nullable=True)
+    callee_name = Column(String, nullable=True)
+    line_number = Column(Integer, nullable=True)
+    file_path = Column(String, nullable=True)
+    confidence_score = Column(Float, nullable=True)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

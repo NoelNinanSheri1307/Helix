@@ -92,8 +92,13 @@ class KnowledgeEdgeResponse(BaseModel):
     id: int
     repository_id: int
     source_node_id: int
-    target_node_id: int
+    target_node_id: int | None = None
     relationship_type: str
+    caller_name: str | None = None
+    callee_name: str | None = None
+    line_number: int | None = None
+    file_path: str | None = None
+    confidence_score: float | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -117,3 +122,8 @@ class RepositoryArchitectureResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class CallGraphResponse(BaseModel):
+    nodes: list[KnowledgeNodeResponse]
+    edges: list[KnowledgeEdgeResponse]
+    call_chains: list[list[str]]

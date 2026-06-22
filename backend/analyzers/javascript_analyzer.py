@@ -12,7 +12,8 @@ class JavascriptAnalyzer(BaseAnalyzer):
             "imports": [],
             "endpoints": [],
             "frameworks": [],
-            "dependencies": []
+            "dependencies": [],
+            "calls": []
         }
 
         try:
@@ -23,6 +24,7 @@ class JavascriptAnalyzer(BaseAnalyzer):
             return result
 
         current_class = None
+        current_function = None
 
         def get_node_text(node):
             return node.text.decode('utf-8', errors='ignore').strip()
@@ -38,7 +40,7 @@ class JavascriptAnalyzer(BaseAnalyzer):
         is_next_api = "/pages/api/" in normalized_path or "/app/api/" in normalized_path
 
         def analyze_node(node):
-            nonlocal current_class
+            nonlocal current_class, current_function
             node_type = node.type
             line = node.start_point[0] + 1
 
@@ -47,7 +49,6 @@ class JavascriptAnalyzer(BaseAnalyzer):
                 etype = "CLASS"
                 
                 # Check decorators (NestJS)
-                # In TS/JS decorators might appear before class
                 text_before = ""
                 if node.prev_sibling and node.prev_sibling.type == "decorator":
                     text_before = get_node_text(node.prev_sibling)
@@ -73,7 +74,6 @@ class JavascriptAnalyzer(BaseAnalyzer):
             elif node_type in ("function_declaration", "function"):
                 name = get_identifier(node) or "UnknownFunction"
                 
-                # Categorize function
                 etype = "FUNCTION"
                 if name.startswith("use") and len(name) > 3 and name[3].isupper():
                     etype = "HOOK"
@@ -84,14 +84,23 @@ class JavascriptAnalyzer(BaseAnalyzer):
 
                 result["functions"].append({"name": name, "line": line, "type": etype})
 
+                old_func = current_function
+                current_function = name
+                for child in node.children:
+                    analyze_node(child)
+                current_function = old_func
+                return
+
             elif node_type == "variable_declarator":
                 # Check for arrow function components/hooks: const MyComponent = () => {}
                 name = get_identifier(node)
                 if name:
                     is_arrow_fn = False
+                    val_node = None
                     for child in node.children:
                         if child.type in ("arrow_function", "function_expression"):
                             is_arrow_fn = True
+                            val_node = child
                             break
                     if is_arrow_fn:
                         etype = "FUNCTION"
@@ -103,6 +112,12 @@ class JavascriptAnalyzer(BaseAnalyzer):
                             result["frameworks"].append("React")
                         
                         result["functions"].append({"name": name, "line": line, "type": etype})
+
+                        old_func = current_function
+                        current_function = name
+                        analyze_node(val_node)
+                        current_function = old_func
+                        return
 
             elif node_type == "import_statement":
                 text = get_node_text(node)
@@ -125,10 +140,44 @@ class JavascriptAnalyzer(BaseAnalyzer):
                     })
                     result["frameworks"].append("Express")
 
+                if len(node.children) > 0:
+                    func_node = node.children[0]
+                    func_text = get_node_text(func_node)
+                    callee_name = func_text.split("(")[0].strip()
+                    
+                    caller_name = current_function
+                    if current_class and current_function:
+                        caller_name = f"{current_class}.{current_function}"
+                        
+                    call_type = "CALLS"
+                    if "." in callee_name:
+                        call_type = "INVOKES"
+                        
+                    result["calls"].append({
+                        "caller": caller_name,
+                        "callee": callee_name,
+                        "line": line,
+                        "type": call_type
+                    })
+
+            elif node_type == "new_expression":
+                callee_text = get_node_text(node)
+                callee_name = callee_text.replace("new ", "").split("(")[0].strip()
+                
+                caller_name = current_function
+                if current_class and current_function:
+                    caller_name = f"{current_class}.{current_function}"
+                    
+                result["calls"].append({
+                    "caller": caller_name,
+                    "callee": callee_name,
+                    "line": line,
+                    "type": "CREATES"
+                })
+
             # NestJS method decorators for endpoints
             elif node_type == "method_definition":
                 name = get_identifier(node) or "UnknownMethod"
-                # Check decorators
                 decorators = []
                 for child in node.children:
                     if child.type == "decorator":
@@ -157,6 +206,13 @@ class JavascriptAnalyzer(BaseAnalyzer):
                         "line": line,
                         "type": "METHOD"
                     })
+
+                old_func = current_function
+                current_function = name
+                for child in node.children:
+                    analyze_node(child)
+                current_function = old_func
+                return
 
             for child in node.children:
                 analyze_node(child)

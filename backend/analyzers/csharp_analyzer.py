@@ -12,7 +12,8 @@ class CsharpAnalyzer(BaseAnalyzer):
             "imports": [],
             "endpoints": [],
             "frameworks": [],
-            "dependencies": []
+            "dependencies": [],
+            "calls": []
         }
 
         try:
@@ -23,6 +24,7 @@ class CsharpAnalyzer(BaseAnalyzer):
             return result
 
         current_class = None
+        current_function = None
 
         def get_node_text(node):
             return node.text.decode('utf-8', errors='ignore').strip()
@@ -81,7 +83,7 @@ class CsharpAnalyzer(BaseAnalyzer):
             return None
 
         def analyze_node(node):
-            nonlocal current_class
+            nonlocal current_class, current_function
             node_type = node.type
             line = node.start_point[0] + 1
 
@@ -127,7 +129,7 @@ class CsharpAnalyzer(BaseAnalyzer):
                     analyze_node(child)
                 return
 
-            elif node_type == "method_declaration":
+            elif node_type in ("method_declaration", "constructor_declaration"):
                 name = get_identifier(node) or "UnknownMethod"
                 attributes = extract_attributes(node)
 
@@ -154,6 +156,13 @@ class CsharpAnalyzer(BaseAnalyzer):
                         "type": "METHOD"
                     })
 
+                old_func = current_function
+                current_function = name
+                for child in node.children:
+                    analyze_node(child)
+                current_function = old_func
+                return
+
             elif node_type == "using_directive":
                 text = get_node_text(node)
                 # e.g. using Microsoft.AspNetCore.Mvc;
@@ -162,6 +171,43 @@ class CsharpAnalyzer(BaseAnalyzer):
                     namespace = match.group(1)
                     result["imports"].append({"name": namespace, "line": line})
                     self._detect_dependencies_from_import(namespace, result)
+
+            elif node_type == "invocation_expression":
+                if len(node.children) > 0:
+                    func_node = node.children[0]
+                    func_text = get_node_text(func_node)
+                    
+                    caller_name = current_function
+                    if current_class and current_function:
+                        caller_name = f"{current_class}.{current_function}"
+                        
+                    call_type = "CALLS"
+                    if "." in func_text:
+                        call_type = "INVOKES"
+                        
+                    if caller_name:
+                        result["calls"].append({
+                            "caller": caller_name,
+                            "callee": func_text,
+                            "line": line,
+                            "type": call_type
+                        })
+
+            elif node_type == "object_creation_expression":
+                callee_text = get_node_text(node)
+                callee_name = callee_text.replace("new ", "").split("(")[0].strip()
+                
+                caller_name = current_function
+                if current_class and current_function:
+                    caller_name = f"{current_class}.{current_function}"
+                    
+                if caller_name:
+                    result["calls"].append({
+                        "caller": caller_name,
+                        "callee": callee_name,
+                        "line": line,
+                        "type": "CREATES"
+                    })
 
             for child in node.children:
                 analyze_node(child)

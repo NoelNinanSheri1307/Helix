@@ -7,9 +7,10 @@ import { useSession } from 'next-auth/react';
 import { ArrowLeft, Braces, FileCog, Files, FolderTree, GitBranch, Play, Star, FileText, Box, Info, Code, Layers, Workflow, AlertTriangle, AlertCircle, Activity } from 'lucide-react';
 import { DirectoryTree } from '../../../components/DirectoryTree';
 import { StatusBadge } from '../../../components/StatusBadge';
-import { getRepositories, getRepositoryStructure, getRepositoryEntities, getRepositoryGraph, getRepositoryArchitecture } from '../../../lib/api';
+import { getRepositories, getRepositoryStructure, getRepositoryEntities, getRepositoryGraph, getRepositoryArchitecture, getRepositoryCallGraph, CallGraphData } from '../../../lib/api';
 import { Repository, RepositoryStructure, CodeEntity, RepositoryGraph, RepositoryArchitecture } from '../../../types';
 import { KnowledgeGraph } from '../../../components/KnowledgeGraph';
+import { CallGraph } from '../../../components/CallGraph';
 import { EmptyState } from '../../../components/EmptyState';
 
 export default function RepositoryDetailsPage() {
@@ -20,9 +21,10 @@ export default function RepositoryDetailsPage() {
   const [entities, setEntities] = useState<CodeEntity[]>([]);
   const [graph, setGraph] = useState<RepositoryGraph | null>(null);
   const [architecture, setArchitecture] = useState<RepositoryArchitecture | null>(null);
+  const [callGraph, setCallGraph] = useState<CallGraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'tree' | 'languages' | 'frameworks' | 'entryPoints' | 'dependencies' | 'configFiles' | 'entities' | 'graph' | 'endpoints' | 'architecture'>('tree');
+  const [activeTab, setActiveTab] = useState<'tree' | 'languages' | 'frameworks' | 'entryPoints' | 'dependencies' | 'configFiles' | 'entities' | 'graph' | 'endpoints' | 'architecture' | 'callgraph'>('tree');
   const [entitySearch, setEntitySearch] = useState('');
   const [entityTypeFilter, setEntityTypeFilter] = useState('ALL');
 
@@ -38,16 +40,18 @@ export default function RepositoryDetailsPage() {
         if (!selected) throw new Error('Repository not found');
         setRepository(selected);
         if (selected.status === 'CLONED') {
-          const [structData, entitiesData, graphData, architectureData] = await Promise.all([
+          const [structData, entitiesData, graphData, architectureData, callGraphData] = await Promise.all([
             getRepositoryStructure(params.id, session.user.email),
             getRepositoryEntities(params.id, session.user.email),
             getRepositoryGraph(params.id, session.user.email).catch(() => null),
-            getRepositoryArchitecture(params.id, session.user.email).catch(() => null)
+            getRepositoryArchitecture(params.id, session.user.email).catch(() => null),
+            getRepositoryCallGraph(params.id, session.user.email).catch(() => null)
           ]);
           setStructure(structData);
           setEntities(entitiesData);
           setGraph(graphData);
           setArchitecture(architectureData);
+          setCallGraph(callGraphData);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unable to load repository');
@@ -247,6 +251,14 @@ export default function RepositoryDetailsPage() {
             />
             
             <InteractiveStat 
+              icon={<Activity size={17} />} 
+              label="Call Graph" 
+              value={callGraph?.edges.length ?? 0} 
+              active={activeTab === 'callgraph'} 
+              onClick={() => setActiveTab('callgraph')} 
+            />
+            
+            <InteractiveStat 
               icon={<Play size={17} />} 
               label="Endpoints" 
               value={entities.filter(e => e.entity_type === 'ENDPOINT').length} 
@@ -281,6 +293,7 @@ export default function RepositoryDetailsPage() {
                   {activeTab === 'graph' && <GitBranch size={16} className="text-gold" />}
                   {activeTab === 'endpoints' && <Play size={16} className="text-gold" />}
                   {activeTab === 'architecture' && <Layers size={16} className="text-gold" />}
+                  {activeTab === 'callgraph' && <Activity size={16} className="text-gold" />}
                   <span className="capitalize">
                     {activeTab === 'tree' ? 'Directory Structure Tree' : 
                      activeTab === 'languages' ? 'Detected Languages' : 
@@ -290,7 +303,8 @@ export default function RepositoryDetailsPage() {
                      activeTab === 'configFiles' ? 'Categorized Config Files' : 
                      activeTab === 'entities' ? 'AST Parsed Code Entities' : 
                      activeTab === 'endpoints' ? 'Identified API Endpoints' : 
-                     activeTab === 'architecture' ? 'System Architecture Analysis' : 'Connected Knowledge Graph'}
+                     activeTab === 'architecture' ? 'System Architecture Analysis' : 
+                     activeTab === 'callgraph' ? 'Behavior Call Graph Analysis' : 'Connected Knowledge Graph'}
                   </span>
                 </h2>
                 <span className="text-[10px] text-zinc-500 font-mono-ui font-medium">Repository Inspector</span>
@@ -909,6 +923,21 @@ export default function RepositoryDetailsPage() {
                       </>
                     ) : (
                       <EmptyState message="I couldn't analyze the system architecture for this repository." />
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'callgraph' && (
+                  <div className="p-4">
+                    {callGraph ? (
+                      <CallGraph
+                        nodes={callGraph.nodes}
+                        edges={callGraph.edges}
+                        callChains={callGraph.call_chains}
+                        repositoryName={repository?.name || 'Unknown'}
+                      />
+                    ) : (
+                      <EmptyState message="No call graph behavior data is currently available. Make sure the repository has been cloned and analyzed." />
                     )}
                   </div>
                 )}

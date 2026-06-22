@@ -12,7 +12,8 @@ class GoAnalyzer(BaseAnalyzer):
             "imports": [],
             "endpoints": [],
             "frameworks": [],
-            "dependencies": []
+            "dependencies": [],
+            "calls": []
         }
 
         try:
@@ -21,6 +22,9 @@ class GoAnalyzer(BaseAnalyzer):
         except Exception:
             self._fallback_regex(file_path, code_bytes, result)
             return result
+
+        current_class = None
+        current_function = None
 
         def get_node_text(node):
             return node.text.decode('utf-8', errors='ignore').strip()
@@ -32,6 +36,7 @@ class GoAnalyzer(BaseAnalyzer):
             return None
 
         def analyze_node(node):
+            nonlocal current_class, current_function
             node_type = node.type
             line = node.start_point[0] + 1
 
@@ -56,13 +61,27 @@ class GoAnalyzer(BaseAnalyzer):
             elif node_type in ("function_declaration", "method_declaration"):
                 name = get_identifier(node) or "UnknownFunc"
                 
-                # Check parameters for handler context signatures
-                params_text = ""
-                for child in node.children:
-                    if child.type == "parameter_list":
-                        params_text = get_node_text(child).lower()
-                        break
+                receiver_type = None
+                if node_type == "method_declaration":
+                    # receiver is the first parameter_list child
+                    param_lists = [child for child in node.children if child.type == "parameter_list"]
+                    if param_lists:
+                        rec_list = param_lists[0]
+                        rec_text = get_node_text(rec_list).strip("()")
+                        # match pointer type or simple type
+                        match_rec = re.search(r'(?:\*\s*)?(\w+)\s*$', rec_text)
+                        if match_rec:
+                            receiver_type = match_rec.group(1)
                 
+                # Check parameters (it will be the second parameter_list for methods, or first for functions)
+                params_text = ""
+                param_lists = [child for child in node.children if child.type == "parameter_list"]
+                if param_lists:
+                    if node_type == "method_declaration" and len(param_lists) > 1:
+                        params_text = get_node_text(param_lists[1]).lower()
+                    else:
+                        params_text = get_node_text(param_lists[0]).lower()
+
                 etype = "FUNCTION"
                 if "gin.context" in params_text or "fiber.ctx" in params_text or "echo.context" in params_text or "http.responsewriter" in params_text:
                     etype = "HANDLER"
@@ -77,6 +96,18 @@ class GoAnalyzer(BaseAnalyzer):
                     
                 result["functions"].append({"name": name, "line": line, "type": etype})
 
+                old_class = current_class
+                old_func = current_function
+                current_class = receiver_type
+                current_function = name
+
+                for child in node.children:
+                    analyze_node(child)
+
+                current_function = old_func
+                current_class = old_class
+                return
+
             elif node_type == "import_spec":
                 text = get_node_text(node)
                 # Cleanup quotes
@@ -85,7 +116,7 @@ class GoAnalyzer(BaseAnalyzer):
                 self._detect_dependencies_from_import(text_clean, result)
 
             elif node_type == "call_expression":
-                # Route registration calls: r.GET("/api/v1/users", handler)
+                # Route registration/general calls
                 text = get_node_text(node)
                 match = re.search(r'\w+\.(GET|POST|PUT|DELETE|PATCH|Use|Group)\s*\(\s*["\']([^"\']+)["\']', text, re.IGNORECASE)
                 if match:
@@ -109,6 +140,26 @@ class GoAnalyzer(BaseAnalyzer):
                             "type": "ENDPOINT",
                             "path": path,
                             "method": method.upper()
+                        })
+
+                if len(node.children) > 0:
+                    func_node = node.children[0]
+                    func_text = get_node_text(func_node)
+                    
+                    caller_name = current_function
+                    if current_class and current_function:
+                        caller_name = f"{current_class}.{current_function}"
+                        
+                    call_type = "CALLS"
+                    if "." in func_text:
+                        call_type = "INVOKES"
+                    
+                    if caller_name:
+                        result["calls"].append({
+                            "caller": caller_name,
+                            "callee": func_text,
+                            "line": line,
+                            "type": call_type
                         })
 
             for child in node.children:

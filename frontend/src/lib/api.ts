@@ -261,3 +261,23 @@ export async function getRepositoryArchitecture(
   }
   return body as RepositoryArchitecture;
 }
+
+export interface CallGraphData {
+  nodes: any[];
+  edges: any[];
+  call_chains: string[][];
+}
+
+export async function getRepositoryCallGraph(
+  id: string,
+  email: string
+): Promise<CallGraphData> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/callgraph?email=${encodeURIComponent(email)}`
+  );
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(mapApiError(body));
+  }
+  return body as CallGraphData;
+}

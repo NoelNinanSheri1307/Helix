@@ -12,7 +12,8 @@ class JavaAnalyzer(BaseAnalyzer):
             "imports": [],
             "endpoints": [],
             "frameworks": [],
-            "dependencies": []
+            "dependencies": [],
+            "calls": []
         }
 
         try:
@@ -23,6 +24,7 @@ class JavaAnalyzer(BaseAnalyzer):
             return result
 
         current_class = None
+        current_function = None
         class_annotations = {}
 
         def get_node_text(node):
@@ -92,7 +94,7 @@ class JavaAnalyzer(BaseAnalyzer):
             return None
 
         def analyze_node(node):
-            nonlocal current_class
+            nonlocal current_class, current_function
             node_type = node.type
             line = node.start_point[0] + 1
 
@@ -129,7 +131,7 @@ class JavaAnalyzer(BaseAnalyzer):
                 current_class = old_class
                 return
 
-            elif node_type == "method_declaration":
+            elif node_type in ("method_declaration", "constructor_declaration"):
                 name = get_identifier(node) or "UnknownMethod"
                 annotations = extract_annotations(node)
 
@@ -155,6 +157,47 @@ class JavaAnalyzer(BaseAnalyzer):
                         "line": line,
                         "type": "METHOD"
                     })
+
+                old_func = current_function
+                current_function = name
+                for child in node.children:
+                    analyze_node(child)
+                current_function = old_func
+                return
+
+            elif node_type == "method_invocation":
+                callee_text = get_node_text(node)
+                callee_name = callee_text.split("(")[0].strip()
+                
+                caller_name = current_function
+                if current_class and current_function:
+                    caller_name = f"{current_class}.{current_function}"
+                    
+                call_type = "CALLS"
+                if "." in callee_name:
+                    call_type = "INVOKES"
+                    
+                result["calls"].append({
+                    "caller": caller_name,
+                    "callee": callee_name,
+                    "line": line,
+                    "type": call_type
+                })
+
+            elif node_type == "object_creation_expression":
+                callee_text = get_node_text(node)
+                callee_name = callee_text.split("(")[0].strip()
+                
+                caller_name = current_function
+                if current_class and current_function:
+                    caller_name = f"{current_class}.{current_function}"
+                    
+                result["calls"].append({
+                    "caller": caller_name,
+                    "callee": callee_name,
+                    "line": line,
+                    "type": "CREATES"
+                })
 
             elif node_type == "import_declaration":
                 text = get_node_text(node)
