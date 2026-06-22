@@ -71,6 +71,37 @@ alter_statements = [
     "ALTER TABLE knowledge_edges ADD COLUMN IF NOT EXISTS file_path VARCHAR;",
     "ALTER TABLE knowledge_edges ADD COLUMN IF NOT EXISTS confidence_score DOUBLE PRECISION;",
     "ALTER TABLE knowledge_edges ALTER COLUMN target_node_id DROP NOT NULL;",
+    """
+    CREATE TABLE IF NOT EXISTS execution_flows (
+        id SERIAL PRIMARY KEY,
+        repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+        flow_name VARCHAR NOT NULL,
+        flow_type VARCHAR NOT NULL,
+        entry_point VARCHAR,
+        components_used JSON NOT NULL DEFAULT '[]',
+        database_interactions JSON NOT NULL DEFAULT '[]',
+        external_services JSON NOT NULL DEFAULT '[]',
+        confidence_score DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_execution_flows_repository_id ON execution_flows(repository_id);",
+    "CREATE INDEX IF NOT EXISTS ix_execution_flows_flow_name ON execution_flows(flow_name);",
+    "CREATE INDEX IF NOT EXISTS ix_execution_flows_flow_type ON execution_flows(flow_type);",
+    """
+    CREATE TABLE IF NOT EXISTS flow_steps (
+        id SERIAL PRIMARY KEY,
+        flow_id INTEGER NOT NULL REFERENCES execution_flows(id) ON DELETE CASCADE,
+        step_number INTEGER NOT NULL,
+        step_name VARCHAR NOT NULL,
+        description VARCHAR,
+        entity_id INTEGER REFERENCES code_entities(id) ON DELETE SET NULL,
+        file_path VARCHAR,
+        line_number INTEGER,
+        node_type VARCHAR
+    );
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_flow_steps_flow_id ON flow_steps(flow_id);",
 ]
 
 with engine.connect() as conn:

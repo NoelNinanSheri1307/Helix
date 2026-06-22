@@ -127,3 +127,33 @@ class CallGraphResponse(BaseModel):
     nodes: list[KnowledgeNodeResponse]
     edges: list[KnowledgeEdgeResponse]
     call_chains: list[list[str]]
+
+
+class FlowStepResponse(BaseModel):
+    id: int
+    flow_id: int
+    step_number: int
+    step_name: str
+    description: str | None = None
+    entity_id: int | None = None
+    file_path: str | None = None
+    line_number: int | None = None
+    node_type: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ExecutionFlowResponse(BaseModel):
+    id: int
+    repository_id: int
+    flow_name: str
+    flow_type: str
+    entry_point: str | None = None
+    components_used: list[str]
+    database_interactions: list[str]
+    external_services: list[str]
+    confidence_score: float
+    created_at: datetime
+    steps: list[FlowStepResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)

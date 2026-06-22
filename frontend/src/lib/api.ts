@@ -281,3 +281,73 @@ export async function getRepositoryCallGraph(
   }
   return body as CallGraphData;
 }
+
+export interface FlowStep {
+  id: number;
+  flow_id: number;
+  step_number: number;
+  step_name: string;
+  description: string | null;
+  entity_id: number | null;
+  file_path: string | null;
+  line_number: number | null;
+  node_type: string | null;
+}
+
+export interface ExecutionFlow {
+  id: number;
+  repository_id: number;
+  flow_name: string;
+  flow_type: string;
+  entry_point: string | null;
+  components_used: string[];
+  database_interactions: string[];
+  external_services: string[];
+  confidence_score: number;
+  created_at: string;
+  steps: FlowStep[];
+}
+
+export async function getRepositoryFlows(
+  id: string,
+  email: string
+): Promise<ExecutionFlow[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/flows?email=${encodeURIComponent(email)}`
+  );
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(mapApiError(body));
+  }
+  return body as ExecutionFlow[];
+}
+
+export async function searchRepositoryFlows(
+  id: string,
+  email: string,
+  q: string
+): Promise<ExecutionFlow[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/flows/search?email=${encodeURIComponent(email)}&q=${encodeURIComponent(q)}`
+  );
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(mapApiError(body));
+  }
+  return body as ExecutionFlow[];
+}
+
+export async function getRepositoryFlowDetail(
+  id: string,
+  flowId: number,
+  email: string
+): Promise<ExecutionFlow> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/flows/${flowId}?email=${encodeURIComponent(email)}`
+  );
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(mapApiError(body));
+  }
+  return body as ExecutionFlow;
+}

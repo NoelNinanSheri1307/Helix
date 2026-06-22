@@ -7,10 +7,11 @@ import { useSession } from 'next-auth/react';
 import { ArrowLeft, Braces, FileCog, Files, FolderTree, GitBranch, Play, Star, FileText, Box, Info, Code, Layers, Workflow, AlertTriangle, AlertCircle, Activity } from 'lucide-react';
 import { DirectoryTree } from '../../../components/DirectoryTree';
 import { StatusBadge } from '../../../components/StatusBadge';
-import { getRepositories, getRepositoryStructure, getRepositoryEntities, getRepositoryGraph, getRepositoryArchitecture, getRepositoryCallGraph, CallGraphData } from '../../../lib/api';
+import { getRepositories, getRepositoryStructure, getRepositoryEntities, getRepositoryGraph, getRepositoryArchitecture, getRepositoryCallGraph, CallGraphData, getRepositoryFlows, ExecutionFlow } from '../../../lib/api';
 import { Repository, RepositoryStructure, CodeEntity, RepositoryGraph, RepositoryArchitecture } from '../../../types';
 import { KnowledgeGraph } from '../../../components/KnowledgeGraph';
 import { CallGraph } from '../../../components/CallGraph';
+import { ExecutionFlows } from '../../../components/ExecutionFlows';
 import { EmptyState } from '../../../components/EmptyState';
 
 export default function RepositoryDetailsPage() {
@@ -22,9 +23,11 @@ export default function RepositoryDetailsPage() {
   const [graph, setGraph] = useState<RepositoryGraph | null>(null);
   const [architecture, setArchitecture] = useState<RepositoryArchitecture | null>(null);
   const [callGraph, setCallGraph] = useState<CallGraphData | null>(null);
+  const [flows, setFlows] = useState<ExecutionFlow[]>([]);
+  const [initialCallGraphNode, setInitialCallGraphNode] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'tree' | 'languages' | 'frameworks' | 'entryPoints' | 'dependencies' | 'configFiles' | 'entities' | 'graph' | 'endpoints' | 'architecture' | 'callgraph'>('tree');
+  const [activeTab, setActiveTab] = useState<'tree' | 'languages' | 'frameworks' | 'entryPoints' | 'dependencies' | 'configFiles' | 'entities' | 'graph' | 'endpoints' | 'architecture' | 'callgraph' | 'flows'>('tree');
   const [entitySearch, setEntitySearch] = useState('');
   const [entityTypeFilter, setEntityTypeFilter] = useState('ALL');
 
@@ -40,18 +43,20 @@ export default function RepositoryDetailsPage() {
         if (!selected) throw new Error('Repository not found');
         setRepository(selected);
         if (selected.status === 'CLONED') {
-          const [structData, entitiesData, graphData, architectureData, callGraphData] = await Promise.all([
+          const [structData, entitiesData, graphData, architectureData, callGraphData, flowsData] = await Promise.all([
             getRepositoryStructure(params.id, session.user.email),
             getRepositoryEntities(params.id, session.user.email),
             getRepositoryGraph(params.id, session.user.email).catch(() => null),
             getRepositoryArchitecture(params.id, session.user.email).catch(() => null),
-            getRepositoryCallGraph(params.id, session.user.email).catch(() => null)
+            getRepositoryCallGraph(params.id, session.user.email).catch(() => null),
+            getRepositoryFlows(params.id, session.user.email).catch(() => [])
           ]);
           setStructure(structData);
           setEntities(entitiesData);
           setGraph(graphData);
           setArchitecture(architectureData);
           setCallGraph(callGraphData);
+          setFlows(flowsData);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unable to load repository');
@@ -257,6 +262,14 @@ export default function RepositoryDetailsPage() {
               active={activeTab === 'callgraph'} 
               onClick={() => setActiveTab('callgraph')} 
             />
+
+            <InteractiveStat 
+              icon={<Workflow size={17} />} 
+              label="Execution Flows" 
+              value={flows.length} 
+              active={activeTab === 'flows'} 
+              onClick={() => setActiveTab('flows')} 
+            />
             
             <InteractiveStat 
               icon={<Play size={17} />} 
@@ -294,6 +307,7 @@ export default function RepositoryDetailsPage() {
                   {activeTab === 'endpoints' && <Play size={16} className="text-gold" />}
                   {activeTab === 'architecture' && <Layers size={16} className="text-gold" />}
                   {activeTab === 'callgraph' && <Activity size={16} className="text-gold" />}
+                  {activeTab === 'flows' && <Workflow size={16} className="text-gold" />}
                   <span className="capitalize">
                     {activeTab === 'tree' ? 'Directory Structure Tree' : 
                      activeTab === 'languages' ? 'Detected Languages' : 
@@ -304,7 +318,8 @@ export default function RepositoryDetailsPage() {
                      activeTab === 'entities' ? 'AST Parsed Code Entities' : 
                      activeTab === 'endpoints' ? 'Identified API Endpoints' : 
                      activeTab === 'architecture' ? 'System Architecture Analysis' : 
-                     activeTab === 'callgraph' ? 'Behavior Call Graph Analysis' : 'Connected Knowledge Graph'}
+                     activeTab === 'callgraph' ? 'Behavior Call Graph Analysis' : 
+                     activeTab === 'flows' ? 'Execution Flows Analysis' : 'Connected Knowledge Graph'}
                   </span>
                 </h2>
                 <span className="text-[10px] text-zinc-500 font-mono-ui font-medium">Repository Inspector</span>
@@ -935,10 +950,24 @@ export default function RepositoryDetailsPage() {
                         edges={callGraph.edges}
                         callChains={callGraph.call_chains}
                         repositoryName={repository?.name || 'Unknown'}
+                        initialNodeName={initialCallGraphNode}
                       />
                     ) : (
                       <EmptyState message="No call graph behavior data is currently available. Make sure the repository has been cloned and analyzed." />
                     )}
+                  </div>
+                )}
+
+                {activeTab === 'flows' && (
+                  <div className="p-4">
+                    <ExecutionFlows
+                      repositoryId={params.id}
+                      userEmail={session?.user?.email || ''}
+                      onViewCallGraph={(nodeName) => {
+                        setInitialCallGraphNode(nodeName);
+                        setActiveTab('callgraph');
+                      }}
+                    />
                   </div>
                 )}
               </div>

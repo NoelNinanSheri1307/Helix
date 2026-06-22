@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 from database import Base, engine, get_db
 from github_service import RepoMetadata, validate_and_fetch_metadata
-from models import Repository, RepositoryStructure, User, CodeEntity, KnowledgeNode, KnowledgeEdge, RepositoryArchitecture
+from models import Repository, RepositoryStructure, User, CodeEntity, KnowledgeNode, KnowledgeEdge, RepositoryArchitecture, ExecutionFlow, FlowStep
 from repository_clone_service import RepositoryCloneService
 from schemas import (
     RepositoryCloneResponse,
@@ -25,6 +25,8 @@ from schemas import (
     RepositoryGraphResponse,
     RepositoryArchitectureResponse,
     CallGraphResponse,
+    FlowStepResponse,
+    ExecutionFlowResponse,
 )
 
 
@@ -42,8 +44,20 @@ async def lifespan(app: FastAPI):
                 repo.status = "FAILED"
                 logger.warning(f"Repository ID {repo.id} was found in CLONING status during startup, marking as FAILED.")
             db.commit()
+
+        # Trigger execution flow discovery for already-cloned repos if they don't have flows yet
+        from execution_flow_service import ExecutionFlowService
+        cloned_repos = db.query(Repository).filter(Repository.analysis_status == "CLONED").all()
+        for repo in cloned_repos:
+            has_flows = db.query(ExecutionFlow).filter(ExecutionFlow.repository_id == repo.id).first() is not None
+            if not has_flows:
+                logger.info(f"Repository ID {repo.id} ({repo.repository_name}) has no execution flows, running flow discovery...")
+                try:
+                    ExecutionFlowService.discover_flows(db, repo.id)
+                except Exception as flow_exc:
+                    logger.error(f"Failed to run startup flow discovery for repo {repo.id}: {flow_exc}")
     except Exception as exc:
-        logger.error(f"Failed to clean up cloning status on startup: {exc}")
+        logger.error(f"Failed to clean up cloning status or run startup flow discovery: {exc}")
     finally:
         db.close()
     yield
@@ -643,5 +657,96 @@ def get_repository_call_graph(
         edges=edges,
         call_chains=unique_chains,
     )
+
+
+@app.get(
+    "/repository/{id}/flows",
+    response_model=list[ExecutionFlowResponse],
+)
+def get_repository_flows(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    flows = (
+        db.query(ExecutionFlow)
+        .filter(ExecutionFlow.repository_id == repository.id)
+        .order_by(ExecutionFlow.id)
+        .all()
+    )
+    for flow in flows:
+        flow.steps = (
+            db.query(FlowStep)
+            .filter(FlowStep.flow_id == flow.id)
+            .order_by(FlowStep.step_number)
+            .all()
+        )
+    return flows
+
+
+@app.get(
+    "/repository/{id}/flows/search",
+    response_model=list[ExecutionFlowResponse],
+)
+def search_repository_flows(
+    id: int,
+    email: str,
+    q: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    from sqlalchemy import String, cast
+    query = (
+        db.query(ExecutionFlow)
+        .filter(ExecutionFlow.repository_id == repository.id)
+    )
+    if q:
+        query = query.filter(
+            (ExecutionFlow.flow_name.ilike(f"%{q}%")) |
+            (ExecutionFlow.flow_type.ilike(f"%{q}%")) |
+            (cast(ExecutionFlow.components_used, String).ilike(f"%{q}%"))
+        )
+    flows = query.all()
+    for flow in flows:
+        flow.steps = (
+            db.query(FlowStep)
+            .filter(FlowStep.flow_id == flow.id)
+            .order_by(FlowStep.step_number)
+            .all()
+        )
+    return flows
+
+
+@app.get(
+    "/repository/{id}/flows/{flow_id}",
+    response_model=ExecutionFlowResponse,
+)
+def get_repository_flow_detail(
+    id: int,
+    flow_id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    flow = (
+        db.query(ExecutionFlow)
+        .filter(
+            ExecutionFlow.repository_id == repository.id,
+            ExecutionFlow.id == flow_id,
+        )
+        .first()
+    )
+    if not flow:
+        raise HTTPException(status_code=404, detail="Execution flow not found")
+        
+    flow.steps = (
+        db.query(FlowStep)
+        .filter(FlowStep.flow_id == flow.id)
+        .order_by(FlowStep.step_number)
+        .all()
+    )
+    return flow
+
 
 

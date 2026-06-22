@@ -260,5 +260,12 @@ class ASTAnalysisService:
         except Exception as arch_exc:
             logger.error(f"Failed to generate architecture intelligence for repo {repository_id}: {arch_exc}", exc_info=True)
 
+        # 6. Discover Execution Flows
+        try:
+            from execution_flow_service import ExecutionFlowService
+            ExecutionFlowService.discover_flows(db, repository_id)
+        except Exception as flow_exc:
+            logger.error(f"Failed to discover execution flows for repo {repository_id}: {flow_exc}", exc_info=True)
+
         logger.info(f"[AST Analysis] Finished on repository ID: {repository_id}")
 

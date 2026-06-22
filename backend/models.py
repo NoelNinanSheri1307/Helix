@@ -187,3 +187,47 @@ class RepositoryArchitecture(Base):
     detected_flows = Column(JSON, nullable=False, default=list)  # Inferred call/request flows
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+
+class ExecutionFlow(Base):
+    __tablename__ = "execution_flows"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repository_id = Column(
+        Integer,
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    flow_name = Column(String, nullable=False, index=True)
+    flow_type = Column(String, nullable=False, index=True)
+    entry_point = Column(String, nullable=True)
+    components_used = Column(JSON, nullable=False, default=list)
+    database_interactions = Column(JSON, nullable=False, default=list)
+    external_services = Column(JSON, nullable=False, default=list)
+    confidence_score = Column(Float, nullable=False, default=1.0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class FlowStep(Base):
+    __tablename__ = "flow_steps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    flow_id = Column(
+        Integer,
+        ForeignKey("execution_flows.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    step_number = Column(Integer, nullable=False)
+    step_name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    entity_id = Column(
+        Integer,
+        ForeignKey("code_entities.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    file_path = Column(String, nullable=True)
+    line_number = Column(Integer, nullable=True)
+    node_type = Column(String, nullable=True)
+
+

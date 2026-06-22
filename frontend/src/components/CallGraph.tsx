@@ -28,13 +28,21 @@ interface CallGraphProps {
   edges: KnowledgeEdge[];
   callChains: string[][];
   repositoryName: string;
+  initialNodeName?: string;
 }
 
-export function CallGraph({ nodes, edges, callChains, repositoryName }: CallGraphProps) {
+export function CallGraph({ nodes, edges, callChains, repositoryName, initialNodeName }: CallGraphProps) {
   const [activeSubTab, setActiveSubTab] = useState<'chains' | 'directory' | 'crossfile'>('chains');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNodeName, setSelectedNodeName] = useState<string | null>(null);
   const [expandedChains, setExpandedChains] = useState<Record<number, boolean>>({});
+
+  React.useEffect(() => {
+    if (initialNodeName) {
+      setSelectedNodeName(initialNodeName);
+      setActiveSubTab('directory');
+    }
+  }, [initialNodeName]);
 
   // Clean and prepare nodes/edges
   const nodesMap = useMemo(() => {
