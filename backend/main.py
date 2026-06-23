@@ -31,6 +31,7 @@ from schemas import (
     MemorySnapshotResponse,
     MemorySearchResponse,
     MemorySearchRequest,
+    ContextAssemblyRequest,
 )
 
 
@@ -857,4 +858,20 @@ def search_repository_memory(
     repository = get_owned_repository(id, email, db)
     from repository_memory_service import RepositoryMemoryService
     return RepositoryMemoryService.semantic_search(db, repository.id, payload.query, payload.top_k)
+
+
+@app.post(
+    "/repository/{id}/context",
+    response_model=dict,
+)
+def assemble_repository_context(
+    id: int,
+    email: str,
+    payload: ContextAssemblyRequest,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    from context_assembly_service import ContextAssemblyService
+    return ContextAssemblyService.assemble_context(db, repository.id, payload.query)
+
 

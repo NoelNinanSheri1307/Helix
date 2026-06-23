@@ -195,3 +195,8 @@ class MemorySearchResponse(BaseModel):
 class MemorySearchRequest(BaseModel):
     query: str
     top_k: int = 10
+
+
+class ContextAssemblyRequest(BaseModel):
+    query: str
+
