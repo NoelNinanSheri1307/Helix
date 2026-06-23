@@ -395,3 +395,82 @@ export async function regenerateRepositoryOnboarding(
   }
   return body as Record<string, OnboardingDocument>;
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REPOSITORY MEMORY LAYER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface MemorySnapshot {
+  repository_id: number;
+  snapshot_content: Record<string, any>;
+  snapshot_version: number;
+  created_at: string | null;
+  updated_at: string | null;
+  embedding_count: number;
+}
+
+export interface MemorySearchResultItem {
+  section_type: string;
+  section_key: string;
+  section_text: string;
+  similarity_score: number;
+}
+
+export interface MemorySearchResponse {
+  query: string;
+  results: MemorySearchResultItem[];
+  total_embeddings: number;
+  referenced_components: string[];
+  referenced_flows: string[];
+}
+
+export async function generateRepositoryMemory(
+  id: string,
+  email: string
+): Promise<MemorySnapshot> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/memory/generate?email=${encodeURIComponent(email)}`,
+    { method: "POST" }
+  );
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(mapApiError(body));
+  }
+  return body as MemorySnapshot;
+}
+
+export async function getRepositoryMemory(
+  id: string,
+  email: string
+): Promise<MemorySnapshot> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/memory?email=${encodeURIComponent(email)}`
+  );
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(mapApiError(body));
+  }
+  return body as MemorySnapshot;
+}
+
+export async function searchRepositoryMemory(
+  id: string,
+  email: string,
+  query: string,
+  topK: number = 10
+): Promise<MemorySearchResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/memory/search?email=${encodeURIComponent(email)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, top_k: topK }),
+    }
+  );
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(mapApiError(body));
+  }
+  return body as MemorySearchResponse;
+}

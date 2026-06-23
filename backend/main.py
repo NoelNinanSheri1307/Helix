@@ -28,6 +28,9 @@ from schemas import (
     FlowStepResponse,
     ExecutionFlowResponse,
     OnboardingDocumentResponse,
+    MemorySnapshotResponse,
+    MemorySearchResponse,
+    MemorySearchRequest,
 )
 
 
@@ -806,4 +809,52 @@ def get_repository_onboarding_by_type(
     return doc
 
 
+# ════════════════════════════════════════════════════════════════════════════════
+# REPOSITORY MEMORY LAYER
+# ════════════════════════════════════════════════════════════════════════════════
+
+@app.post(
+    "/repository/{id}/memory/generate",
+    response_model=MemorySnapshotResponse,
+)
+def generate_repository_memory(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    from repository_memory_service import RepositoryMemoryService
+    return RepositoryMemoryService.generate_snapshot(db, repository.id)
+
+
+@app.get(
+    "/repository/{id}/memory",
+    response_model=MemorySnapshotResponse,
+)
+def get_repository_memory(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    from repository_memory_service import RepositoryMemoryService
+    result = RepositoryMemoryService.get_memory(db, repository.id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Repository memory not generated yet")
+    return result
+
+
+@app.post(
+    "/repository/{id}/memory/search",
+    response_model=MemorySearchResponse,
+)
+def search_repository_memory(
+    id: int,
+    email: str,
+    payload: MemorySearchRequest,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    from repository_memory_service import RepositoryMemoryService
+    return RepositoryMemoryService.semantic_search(db, repository.id, payload.query, payload.top_k)
 

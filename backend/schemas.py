@@ -166,3 +166,32 @@ class OnboardingDocumentResponse(BaseModel):
     version: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class MemorySnapshotResponse(BaseModel):
+    repository_id: int
+    snapshot_content: dict
+    snapshot_version: int
+    created_at: str | None = None
+    updated_at: str | None = None
+    embedding_count: int = 0
+
+
+class MemorySearchResultItem(BaseModel):
+    section_type: str
+    section_key: str
+    section_text: str
+    similarity_score: float
+
+
+class MemorySearchResponse(BaseModel):
+    query: str
+    results: list[MemorySearchResultItem]
+    total_embeddings: int
+    referenced_components: list[str] = []
+    referenced_flows: list[str] = []
+
+
+class MemorySearchRequest(BaseModel):
+    query: str
+    top_k: int = 10

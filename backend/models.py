@@ -247,3 +247,35 @@ class OnboardingDocument(Base):
     version = Column(Integer, nullable=False, default=1)
 
 
+class RepositoryMemory(Base):
+    __tablename__ = "repository_memory"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repository_id = Column(
+        Integer,
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+    snapshot_content = Column(JSON, nullable=False, default=dict)
+    snapshot_version = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class RepositoryEmbedding(Base):
+    __tablename__ = "repository_embeddings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repository_id = Column(
+        Integer,
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    section_type = Column(String, nullable=False, index=True)  # e.g. ARCHITECTURE, FLOW, COMPONENT, etc.
+    section_key = Column(String, nullable=False)  # unique key within section type
+    section_text = Column(String, nullable=False)  # the raw text that was embedded
+    embedding = Column(JSON, nullable=False)  # vector as list of floats
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

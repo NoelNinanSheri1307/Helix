@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, FolderGit, GraduationCap, Layers, Workflow, 
-  Settings, LogOut, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, GitBranch 
+  Settings, LogOut, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, GitBranch, Brain 
 } from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
 import { useSidebar } from '../context/SidebarContext';
@@ -60,6 +60,12 @@ export const Sidebar: React.FC = () => {
       name: "Execution Flows",
       href: "/flows",
       icon: Workflow
+    },
+    {
+      name: "Code Atlas",
+      href: "/memory",
+      icon: Brain,
+      devTag: true
     },
     {
       name: "Settings",
@@ -155,6 +161,13 @@ export const Sidebar: React.FC = () => {
                     }`}>
                       {item.name}
                     </span>
+                    {(item as any).devTag && (
+                      <span className={`text-[8px] text-zinc-700 ml-auto border border-zinc-900 px-1 rounded font-mono uppercase tracking-wider transition-all duration-200 ${
+                        isCollapsed ? 'md:hidden lg:inline' : 'md:hidden lg:inline'
+                      }`}>
+                        Dev
+                      </span>
+                    )}
                   </Link>
 
                   {item.isRepos && !isCollapsed && repositories.length > 0 && (

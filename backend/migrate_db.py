@@ -114,6 +114,30 @@ alter_statements = [
     """,
     "CREATE INDEX IF NOT EXISTS ix_onboarding_documents_repository_id ON onboarding_documents(repository_id);",
     "CREATE INDEX IF NOT EXISTS ix_onboarding_documents_document_type ON onboarding_documents(document_type);",
+    """
+    CREATE TABLE IF NOT EXISTS repository_memory (
+        id SERIAL PRIMARY KEY,
+        repository_id INTEGER NOT NULL UNIQUE REFERENCES repositories(id) ON DELETE CASCADE,
+        snapshot_content JSON NOT NULL DEFAULT '{}',
+        snapshot_version INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_repository_memory_repository_id ON repository_memory(repository_id);",
+    """
+    CREATE TABLE IF NOT EXISTS repository_embeddings (
+        id SERIAL PRIMARY KEY,
+        repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+        section_type VARCHAR NOT NULL,
+        section_key VARCHAR NOT NULL,
+        section_text TEXT NOT NULL,
+        embedding JSON NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_repository_embeddings_repository_id ON repository_embeddings(repository_id);",
+    "CREATE INDEX IF NOT EXISTS ix_repository_embeddings_section_type ON repository_embeddings(section_type);",
 ]
 
 with engine.connect() as conn:
