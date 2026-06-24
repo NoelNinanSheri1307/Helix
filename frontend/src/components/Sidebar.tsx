@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, FolderGit, GraduationCap, Layers, Workflow, 
-  Settings, LogOut, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, GitBranch, Brain 
+  Settings, LogOut, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, GitBranch, Brain,
+  MessageSquare
 } from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
 import { useSidebar } from '../context/SidebarContext';
@@ -66,6 +67,11 @@ export const Sidebar: React.FC = () => {
       href: "/memory",
       icon: Brain,
       devTag: true
+    },
+    {
+      name: "Repository Chat",
+      href: "/chat",
+      icon: MessageSquare
     },
     {
       name: "Settings",

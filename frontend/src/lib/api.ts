@@ -57,9 +57,13 @@ function parseRepoName(url: string): string {
   }
 }
 
-function mapApiError(body: { error?: string; detail?: string }): string {
+function mapApiError(body: any): string {
+  if (!body) return "An error occurred.";
+  if (body.detail && typeof body.detail === 'object') {
+    return JSON.stringify(body.detail);
+  }
   const message = body.error || body.detail || "";
-  return ERROR_MESSAGES[message] || message || "An error occurred while submitting the repository.";
+  return ERROR_MESSAGES[message] || message || "An error occurred.";
 }
 
 export async function submitRepository(
@@ -474,3 +478,40 @@ export async function searchRepositoryMemory(
   }
   return body as MemorySearchResponse;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REPOSITORY CHAT LAYER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface ChatResponse {
+  answer: string;
+  confidence: number;
+  provider: string;
+  model: string;
+  referenced_files: string[];
+  referenced_components: string[];
+  referenced_flows: string[];
+  response_time_ms: number;
+}
+
+export async function repositoryChat(
+  id: string,
+  email: string,
+  message: string,
+  mode: string = "explain"
+): Promise<ChatResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/chat?email=${encodeURIComponent(email)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, mode }),
+    }
+  );
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(mapApiError(body));
+  }
+  return body as ChatResponse;
+}
+

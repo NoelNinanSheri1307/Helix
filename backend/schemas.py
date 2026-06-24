@@ -200,3 +200,20 @@ class MemorySearchRequest(BaseModel):
 class ContextAssemblyRequest(BaseModel):
     query: str
 
+
+class ChatRequest(BaseModel):
+    message: str
+    mode: str = "explain"  # "explain" or "analyze"
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    confidence: float
+    provider: str
+    model: str
+    referenced_files: list[str] = []
+    referenced_components: list[str] = []
+    referenced_flows: list[str] = []
+    response_time_ms: int
+
+

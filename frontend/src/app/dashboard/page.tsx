@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { RepoCard } from '../../components/RepoCard';
 import { ErrorModal } from '../../components/ErrorModal';
+import { HelixResourceDialog } from '../../components/HelixResourceDialog';
 import { GitFork, Terminal, Clock, ShieldAlert, Plus, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -18,6 +19,8 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [isCloneErrorOpen, setIsCloneErrorOpen] = useState(false);
+  const [limitDialogOpen, setLimitDialogOpen] = useState(false);
+  const [limitDetail, setLimitDetail] = useState('');
 
   const handleDelete = async (id: string) => {
     if (!session?.user?.email) return;
@@ -87,7 +90,30 @@ export default function DashboardPage() {
     try {
       const res = await submitRepository(session.user.email, repoUrl);
       if (!res.success || res.error) {
-        setError(res.error || 'An error occurred while submitting the repository.');
+        if (res.error?.includes('repository_limit_exceeded') || res.error?.includes('limit reached') || res.error?.includes('Maximum limit')) {
+          let cleanDetail = 'Maximum limit of 7 active repositories reached.';
+          if (res.error) {
+            try {
+              const parsed = JSON.parse(res.error);
+              cleanDetail = parsed.detail || parsed.error || res.error;
+            } catch {
+              cleanDetail = res.error;
+            }
+          }
+          setLimitDetail(cleanDetail);
+          setLimitDialogOpen(true);
+        } else {
+          let cleanMsg = 'An error occurred while submitting the repository.';
+          if (res.error) {
+            try {
+              const parsed = JSON.parse(res.error);
+              cleanMsg = parsed.detail || parsed.error || res.error;
+            } catch {
+              cleanMsg = res.error;
+            }
+          }
+          setError(cleanMsg);
+        }
       } else {
         setRepoUrl('');
         setSubmitSuccess(true);
@@ -101,8 +127,21 @@ export default function DashboardPage() {
           setSubmitSuccess(false);
         }, 4000);
       }
-    } catch {
-      setError('An error occurred while submitting the repository.');
+    } catch (err: any) {
+      const errMsg = err.message || '';
+      if (errMsg.includes('repository_limit_exceeded') || errMsg.includes('limit reached') || errMsg.includes('Maximum limit')) {
+        let cleanDetail = 'Maximum limit of 7 active repositories reached. Please delete an existing repository to import a new one.';
+        try {
+          const parsed = JSON.parse(errMsg);
+          cleanDetail = parsed.detail || parsed.error || errMsg;
+        } catch {
+          cleanDetail = errMsg;
+        }
+        setLimitDetail(cleanDetail);
+        setLimitDialogOpen(true);
+      } else {
+        setError('An error occurred while submitting the repository.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -272,6 +311,13 @@ export default function DashboardPage() {
         title="Clone Failed"
         message="An error occurred while attempting to clone the repository. Technical details have been logged in the backend application."
         reason="Unable to complete repository checkout."
+      />
+
+      <HelixResourceDialog
+        isOpen={limitDialogOpen}
+        onClose={() => setLimitDialogOpen(false)}
+        title="Active Repository Limit"
+        detail={limitDetail}
       />
     </div>
   );

@@ -32,6 +32,8 @@ from schemas import (
     MemorySearchResponse,
     MemorySearchRequest,
     ContextAssemblyRequest,
+    ChatRequest,
+    ChatResponse,
 )
 
 
@@ -226,6 +228,14 @@ def submit_repository(
         db.commit()
         db.refresh(existing)
         return existing
+
+    # Enforce maximum 7 active repositories limit
+    active_count = db.query(Repository).filter(Repository.user_id == user.id).count()
+    if active_count >= 7:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "repository_limit_exceeded", "detail": "Maximum limit of 7 active repositories reached. Please delete an existing repository to import a new one."}
+        )
 
     repository = repository_from_metadata(user.id, metadata)
 
@@ -873,5 +883,21 @@ def assemble_repository_context(
     repository = get_owned_repository(id, email, db)
     from context_assembly_service import ContextAssemblyService
     return ContextAssemblyService.assemble_context(db, repository.id, payload.query)
+
+
+@app.post(
+    "/repository/{id}/chat",
+    response_model=ChatResponse,
+)
+def repository_chat(
+    id: int,
+    email: str,
+    payload: ChatRequest,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    from chat_service import ChatService
+    return ChatService.chat(db, repository.id, payload.message, email, payload.mode)
+
 
 

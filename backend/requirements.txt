@@ -4,6 +4,7 @@ sqlalchemy
 psycopg2-binary
 python-dotenv
 httpx
+google-genai
 tree-sitter==0.21.3
 tree-sitter-languages
 sentence-transformers

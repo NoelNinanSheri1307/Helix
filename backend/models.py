@@ -279,3 +279,35 @@ class RepositoryEmbedding(Base):
     section_text = Column(String, nullable=False)  # the raw text that was embedded
     embedding = Column(JSON, nullable=False)  # vector as list of floats
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChatUsageLog(Base):
+    __tablename__ = "chat_usage_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_email = Column(String, nullable=False, index=True)
+    repository_id = Column(
+        Integer,
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    query_mode = Column(String, nullable=False)  # 'explain' or 'analyze'
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class ChatCache(Base):
+    __tablename__ = "chat_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repository_id = Column(
+        Integer,
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    question_hash = Column(String, nullable=False, index=True)
+    mode = Column(String, nullable=False, index=True)
+    response_content = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+

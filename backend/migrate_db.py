@@ -138,6 +138,27 @@ alter_statements = [
     """,
     "CREATE INDEX IF NOT EXISTS ix_repository_embeddings_repository_id ON repository_embeddings(repository_id);",
     "CREATE INDEX IF NOT EXISTS ix_repository_embeddings_section_type ON repository_embeddings(section_type);",
+    """
+    CREATE TABLE IF NOT EXISTS chat_usage_logs (
+        id SERIAL PRIMARY KEY,
+        user_email VARCHAR NOT NULL,
+        repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+        query_mode VARCHAR NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_chat_usage_logs_user_email_created_at ON chat_usage_logs(user_email, created_at);",
+    """
+    CREATE TABLE IF NOT EXISTS chat_cache (
+        id SERIAL PRIMARY KEY,
+        repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+        question_hash VARCHAR NOT NULL,
+        mode VARCHAR NOT NULL,
+        response_content JSON NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_chat_cache_repo_hash_mode ON chat_cache(repository_id, question_hash, mode);",
 ]
 
 with engine.connect() as conn:
