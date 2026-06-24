@@ -69,7 +69,7 @@ export const Sidebar: React.FC = () => {
       devTag: true
     },
     {
-      name: "Repository Chat",
+      name: "Helix Chat",
       href: "/chat",
       icon: MessageSquare
     },

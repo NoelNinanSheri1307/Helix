@@ -45,7 +45,16 @@ export default function OnboardingPage() {
           // Only show cloned repositories as onboarding requires intelligence scanning
           const cloned = list.filter(r => r.status === 'CLONED');
           setRepositories(cloned);
-          if (cloned.length > 0) {
+          
+          if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const repoParam = params.get('repo');
+            if (repoParam && cloned.some(r => r.id === repoParam)) {
+              setSelectedRepoId(repoParam);
+            } else if (cloned.length > 0) {
+              setSelectedRepoId(cloned[0].id);
+            }
+          } else if (cloned.length > 0) {
             setSelectedRepoId(cloned[0].id);
           }
         })

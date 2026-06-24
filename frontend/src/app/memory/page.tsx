@@ -69,6 +69,7 @@ export default function MemoryPage() {
 
   // Snapshot inspector
   const [snapshotExpanded, setSnapshotExpanded] = useState(false);
+  const [hasAutoSearched, setHasAutoSearched] = useState(false);
 
   // Load repos
   useEffect(() => {
@@ -77,7 +78,23 @@ export default function MemoryPage() {
         .then(list => {
           const cloned = list.filter(r => r.status === 'CLONED');
           setRepositories(cloned);
-          if (cloned.length > 0) setSelectedRepoId(cloned[0].id);
+          
+          if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const repoParam = params.get('repo');
+            const searchParam = params.get('search');
+            
+            if (searchParam) {
+              setSearchQuery(searchParam);
+            }
+            if (repoParam && cloned.some(r => r.id === repoParam)) {
+              setSelectedRepoId(repoParam);
+            } else if (cloned.length > 0) {
+              setSelectedRepoId(cloned[0].id);
+            }
+          } else if (cloned.length > 0) {
+            setSelectedRepoId(cloned[0].id);
+          }
         })
         .catch(err => console.error(err));
     }
@@ -97,6 +114,18 @@ export default function MemoryPage() {
       setMemory(null);
     }
   }, [selectedRepoId, user?.email]);
+
+  // Auto-run search if search query is provided via URL
+  useEffect(() => {
+    if (selectedRepoId && user?.email && searchQuery.trim() && memory && !hasAutoSearched) {
+      setHasAutoSearched(true);
+      setSearching(true);
+      searchRepositoryMemory(selectedRepoId, user.email, searchQuery.trim())
+        .then(data => setSearchResults(data))
+        .catch(err => setError(err.message || 'Search failed'))
+        .finally(() => setSearching(false));
+    }
+  }, [selectedRepoId, user?.email, memory, searchQuery, hasAutoSearched]);
 
   const handleGenerate = async () => {
     if (!selectedRepoId || !user?.email) return;

@@ -480,7 +480,7 @@ export async function searchRepositoryMemory(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// REPOSITORY CHAT LAYER
+// HELIX CHAT LAYER
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface ChatResponse {

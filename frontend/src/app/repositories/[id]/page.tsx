@@ -31,6 +31,17 @@ export default function RepositoryDetailsPage() {
   const [entitySearch, setEntitySearch] = useState('');
   const [entityTypeFilter, setEntityTypeFilter] = useState('ALL');
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      const validTabs = ['tree', 'languages', 'frameworks', 'entryPoints', 'dependencies', 'configFiles', 'entities', 'graph', 'endpoints', 'architecture', 'callgraph', 'flows'];
+      if (tabParam && validTabs.includes(tabParam)) {
+        setActiveTab(tabParam as any);
+      }
+    }
+  }, []);
+
 
   useEffect(() => {
     const load = async () => {

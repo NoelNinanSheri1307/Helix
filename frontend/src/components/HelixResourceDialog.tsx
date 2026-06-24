@@ -30,9 +30,9 @@ export const HelixResourceDialog: React.FC<HelixResourceDialogProps> = ({
         {/* Left Side: Mascot Column */}
         <div className="md:w-1/3 bg-black flex items-center justify-center p-6 border-b md:border-b-0 md:border-r border-zinc-900 shrink-0">
           <img
-            src="/helix_mascot.png"
+            src="/assets/helixkoala.png"
             alt="Helix Mascot"
-            className="w-24 h-24 object-contain opacity-90 filter drop-shadow-[0_0_8px_rgba(212,175,55,0.2)] animate-pulse"
+            className="w-24 h-24 object-contain opacity-90 filter drop-shadow-[0_0_8px_rgba(212,175,55,0.2)] animate-pulse rounded-full border border-zinc-900 bg-zinc-950 p-2 shadow-2xl"
           />
         </div>
 

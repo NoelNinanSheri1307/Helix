@@ -240,7 +240,7 @@ export default function ChatPage() {
             <ArrowLeft size={13} /> Dashboard
           </Link>
           <h1 className="text-xl font-serif-display font-medium text-ivory tracking-tight flex items-center gap-2">
-            <MessageSquare className="text-gold" size={20} /> Repository Chat
+            <MessageSquare className="text-gold" size={20} /> Helix Chat
           </h1>
         </div>
 
@@ -393,7 +393,7 @@ export default function ChatPage() {
                                 {msg.details.referenced_files.map((file, fidx) => (
                                   <Link
                                     key={fidx}
-                                    href={`/memory?search=${encodeURIComponent(file)}`}
+                                    href={`/memory?repo=${selectedRepoId}&search=${encodeURIComponent(file)}`}
                                     className="text-[9px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-850 hover:border-gold hover:text-gold px-1.5 py-0.5 rounded break-all transition-colors inline-flex items-center gap-1 cursor-pointer"
                                     title="Open in Code Atlas"
                                   >
@@ -412,7 +412,7 @@ export default function ChatPage() {
                                 {msg.details.referenced_components.map((comp, cidx) => (
                                   <Link
                                     key={cidx}
-                                    href={`/architecture?component=${encodeURIComponent(comp)}`}
+                                    href={`/repositories/${selectedRepoId}?tab=architecture`}
                                     className="text-[9px] font-mono text-teal-400 bg-teal-500/5 border border-teal-500/10 hover:border-gold hover:text-gold px-1.5 py-0.5 rounded transition-colors inline-flex items-center gap-1 cursor-pointer"
                                     title="Open in Architecture Intelligence"
                                   >
@@ -431,7 +431,7 @@ export default function ChatPage() {
                                 {msg.details.referenced_flows.map((flow, flidx) => (
                                   <Link
                                     key={flidx}
-                                    href={`/flows?flow=${encodeURIComponent(flow)}`}
+                                    href={`/repositories/${selectedRepoId}?tab=flows`}
                                     className="text-[9px] font-mono text-purple-400 bg-purple-500/5 border border-purple-500/10 hover:border-gold hover:text-gold px-1.5 py-0.5 rounded transition-colors inline-flex items-center gap-1 cursor-pointer"
                                     title="Open in Execution Flows"
                                   >
@@ -451,7 +451,7 @@ export default function ChatPage() {
                                 <span className="text-[8.5px] font-mono uppercase tracking-wider text-zinc-550 shrink-0 mt-0.5">Onboarding:</span>
                                 <div className="flex flex-wrap gap-1.5">
                                   <Link
-                                    href="/onboarding"
+                                    href={`/onboarding?repo=${selectedRepoId}`}
                                     className="text-[9px] font-mono text-gold bg-gold/5 border border-gold/10 hover:border-gold hover:bg-gold/10 px-1.5 py-0.5 rounded transition-colors inline-flex items-center gap-1 cursor-pointer"
                                     title="Open in Developer Onboarding"
                                   >

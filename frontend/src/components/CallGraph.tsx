@@ -23,6 +23,14 @@ interface KnowledgeEdge {
   confidence_score?: number | null;
 }
 
+function srcNameOfNode(n: KnowledgeNode | null | undefined): string {
+  return n?.node_name || 'Unknown';
+}
+
+function tgtNameOfNode(n: KnowledgeNode | null | undefined): string {
+  return n?.node_name || 'External';
+}
+
 interface CallGraphProps {
   nodes: KnowledgeNode[];
   edges: KnowledgeEdge[];
@@ -59,8 +67,8 @@ export function CallGraph({ nodes, edges, callChains, repositoryName, initialNod
 
   // Outgoing and Incoming calls list for all nodes
   const callConnections = useMemo(() => {
-    const outgoing: Record<string, KnowledgeEdge[]> = {};
-    const incoming: Record<string, KnowledgeEdge[]> = {};
+    const outgoing: Record<string, KnowledgeEdge[]> = Object.create(null);
+    const incoming: Record<string, KnowledgeEdge[]> = Object.create(null);
 
     edges.forEach(edge => {
       const srcNode = nodesMap.get(edge.source_node_id);
@@ -101,9 +109,6 @@ export function CallGraph({ nodes, edges, callChains, repositoryName, initialNod
       return callerClass !== calleeClass;
     });
   }, [edges, nodesMap]);
-
-  const srcNameOfNode = (n: KnowledgeNode | null | undefined) => n?.node_name || 'Unknown';
-  const tgtNameOfNode = (n: KnowledgeNode | null | undefined) => n?.node_name || 'External';
 
   const confidenceBadge = (score: number | undefined | null) => {
     const s = score !== undefined && score !== null ? score * 100 : 100;
