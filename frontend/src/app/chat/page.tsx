@@ -1,18 +1,19 @@
 "use client";
-
+ 
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
   MessageSquare, ArrowLeft, RefreshCw, Send, Sparkles, Brain, FileText,
   Workflow, Cpu, ShieldAlert, CheckCircle, Trash2, Zap, Hourglass, HelpCircle, Copy
 } from 'lucide-react';
 import {
-  getRepositories, repositoryChat, ChatResponse
+  getRepositories, repositoryChat, ChatResponse, getRepositoryMemory
 } from '../../lib/api';
 import { Repository } from '../../types';
 import { HelixResourceDialog } from '../../components/HelixResourceDialog';
-
+ 
 interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant';
@@ -28,11 +29,12 @@ interface ChatMessage {
     response_time_ms: number;
   };
 }
-
+ 
 export default function ChatPage() {
   const { data: session } = useSession();
   const user = session?.user;
-
+  const router = useRouter();
+ 
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState<string>('');
   const [loadingRepos, setLoadingRepos] = useState(true);
@@ -44,6 +46,7 @@ export default function ChatPage() {
   const [limitDialogOpen, setLimitDialogOpen] = useState(false);
   const [limitDetail, setLimitDetail] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [atlasDialogOpen, setAtlasDialogOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -122,6 +125,21 @@ export default function ChatPage() {
       setMessages([]);
     }
   }, [selectedRepoId, repositories]);
+
+  // Check if repository memory is generated, redirect to Code Atlas if not
+  useEffect(() => {
+    if (selectedRepoId && user?.email) {
+      getRepositoryMemory(selectedRepoId, user.email)
+        .then(memory => {
+          if (!memory || memory.embedding_count === 0) {
+            setAtlasDialogOpen(true);
+          }
+        })
+        .catch(() => {
+          setAtlasDialogOpen(true);
+        });
+    }
+  }, [selectedRepoId, user?.email]);
 
   // Save to local storage on message changes
   const saveMessages = (msgs: ChatMessage[]) => {
@@ -562,6 +580,54 @@ export default function ChatPage() {
         title="Helix Usage Dialog"
         detail={limitDetail}
       />
+
+      {/* Code Atlas Index Warning Dialog */}
+      {atlasDialogOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-300"
+            onClick={() => setAtlasDialogOpen(false)}
+          />
+
+          {/* Dialog Card */}
+          <div className="relative bg-zinc-950 border border-zinc-900 rounded-lg max-w-md w-full shadow-2xl overflow-hidden flex flex-col transform transition-all duration-300 z-10 animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 flex flex-col space-y-4">
+              <div className="flex items-center gap-2 text-gold">
+                <Brain size={20} className="text-gold" />
+                <span className="text-[10px] font-mono uppercase tracking-widest">Helix Protocol</span>
+              </div>
+              
+              <div className="space-y-2">
+                <h2 className="text-base font-serif-display font-medium text-ivory tracking-tight">
+                  Code Atlas Index Required
+                </h2>
+                <p className="text-xs text-zinc-450 leading-relaxed font-sans-ui">
+                  This repository has not been indexed in Code Atlas yet. To use Helix Chat, you must generate its memory snapshot first.
+                </p>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3">
+                <button
+                  onClick={() => setAtlasDialogOpen(false)}
+                  className="px-4 py-2 rounded bg-zinc-900 border border-zinc-800 text-[10.5px] font-mono text-zinc-400 hover:border-zinc-700 hover:text-zinc-300 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setAtlasDialogOpen(false);
+                    router.push(`/memory?repo=${selectedRepoId}`);
+                  }}
+                  className="px-4 py-2 rounded bg-gold text-[10.5px] font-mono text-black font-semibold hover:bg-gold-hover transition-all cursor-pointer"
+                >
+                  Go to Code Atlas
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

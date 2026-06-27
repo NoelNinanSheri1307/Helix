@@ -79,7 +79,128 @@ class ChatService:
                     detail={"error": "usage_limit_exceeded", "limit_type": "analyze", "detail": "Deep Analysis Mode limit of 5 questions reached for today."}
                 )
 
-        # 3. Cache Check
+        # 3. Normalize Query
+        normalized_query = ChatService._normalize_query(query)
+
+        # 4. Intercept LLM/Gemini identity queries
+        import re
+        identity_keywords = [
+            r"\b(who|what|which)\s+(model|llm|ai|assistant|system|bot|framework|creator|author|developer|company|team)\s+(are|is|powers|created|made|built|developed)\s+(you|this)\b",
+            r"\bare\s+you\s+(gemini|gpt|claude|llama|deepseek|chatgpt|openai|google|anthropic|meta)\b",
+            r"\bwhat\s+(model|llm)\s+(are\s+you|is\s+this|do\s+you\s+use|powers\s+you)\b",
+            r"\b(who|what)\s+are\s+you\b",
+            r"\bwhat\s+is\s+your\s+name\b",
+            r"\b(who|what)\s+(created|made|built|developed)\s+you\b",
+            r"\bwhich\s+llm\s+are\s+you\s+using\b"
+        ]
+        is_identity_query = False
+        for pattern in identity_keywords:
+            if re.search(pattern, normalized_query):
+                is_identity_query = True
+                break
+
+        if is_identity_query:
+            return {
+                "answer": "I'm Helix, your repository intelligence assistant. My purpose is to help you understand repositories using Helix's analysis and intelligence engine.",
+                "confidence": 1.0,
+                "provider": "local",
+                "model": "helix-intercept",
+                "referenced_files": [],
+                "referenced_components": [],
+                "referenced_flows": [],
+                "response_time_ms": 0
+            }
+
+        # 5. Intercept Unrelated Queries (Repository-Scoped Responses)
+        words = set(re.findall(r'\b\w+\b', normalized_query))
+        
+        investigation_terms = {
+            "architecture", "blueprint", "class", "classes", "struct", "structs", 
+            "interface", "interfaces", "function", "functions", "method", "methods", 
+            "variable", "variables", "flow", "flows", "step", "steps", "chain", "chains", 
+            "endpoint", "endpoints", "route", "routes", "controller", "controllers", 
+            "service", "services", "database", "databases", "db", "dbs", "table", "tables", 
+            "query", "queries", "onboarding", "dependency", "dependencies", "package", 
+            "packages", "config", "configs", "setting", "settings", "setup", "build", 
+            "deploy", "docker", "pipeline", "pipelines", "import", "imports", "export", 
+            "exports", "server", "servers", "client", "clients", "frontend", "frontends", 
+            "backend", "backends", "auth", "authentication", "login", "signup", "register",
+            "code", "program", "programming", "software", "develop", "implement", "logic", 
+            "script", "scripts", "run", "execute", "test", "tests", "debug", "error", 
+            "errors", "exception", "exceptions", "type", "types", "object", "objects", 
+            "array", "arrays", "list", "lists", "map", "maps", "dictionary", "dictionaries", 
+            "string", "strings", "int", "ints", "bool", "bools", "boolean", "booleans", 
+            "model", "models", "view", "views", "template", "templates", "framework", 
+            "frameworks", "library", "libraries", "api", "apis", "json", "xml", "html", 
+            "css", "js", "ts", "py", "go", "rust", "cpp", "java", "c#", "php", "sql", 
+            "nosql", "git", "commit", "commits", "push", "pull", "merge", "branch", 
+            "branches", "clone", "create", "delete", "update", "read", "write", "call", 
+            "calls", "invoke", "argument", "arguments", "parameter", "parameters", "return", 
+            "returns", "value", "values", "key", "keys", "token", "tokens", "jwt", "jwts", 
+            "session", "sessions", "cookie", "cookies", "request", "requests", "response", 
+            "responses", "header", "headers", "body", "bodies", "param", "params", "url", 
+            "urls", "path", "paths", "port", "ports", "host", "hosts", "ip", "address", 
+            "connection", "connections", "pool", "pools", "async", "await", "promise", 
+            "promises", "thread", "threads", "process", "processes", "memory", "storage", 
+            "disk", "cpu", "ram", "network", "protocol", "protocols", "http", "https", 
+            "ws", "wss", "tcp", "udp", "dns", "ssl", "tls", "cert", "certs", "security", 
+            "encryption", "decryption", "hash", "hashes", "signature", "signatures", "user", 
+            "users", "role", "roles", "permission", "permissions", "acl", "rbac", "abac", 
+            "policy", "policies", "rule", "rules", "guard", "guards", "middleware", 
+            "middlewares", "handler", "handlers", "router", "routers", "match", "regex", 
+            "pattern", "patterns", "expression", "expressions", "language", "languages", 
+            "tech", "technology", "technologies", "stack", "readme", "documentation", 
+            "doc", "docs", "python", "javascript", "typescript", "cplusplus"
+        }
+        
+        context_pronouns = {
+            "this", "here", "it", "us", "we", "codebase", "repository", "project", 
+            "repo", "app", "application", "file", "folder", "directory", "module", 
+            "component", "system", "workspace"
+        }
+        
+        is_related = False
+        if not words:
+            is_related = True
+        elif words.intersection(investigation_terms) or words.intersection(context_pronouns):
+            is_related = True
+        else:
+            from models import Repository, RepositoryStructure
+            repo = db.query(Repository).filter(Repository.id == repository_id).first()
+            repo_keywords = set()
+            if repo:
+                if repo.repository_name:
+                    repo_keywords.update(re.findall(r'\b\w+\b', repo.repository_name.lower()))
+                if repo.language:
+                    repo_keywords.add(repo.language.lower())
+                if repo.framework:
+                    repo_keywords.add(repo.framework.lower())
+                    
+            structure = db.query(RepositoryStructure).filter(RepositoryStructure.repository_id == repository_id).first()
+            if structure:
+                for d in (structure.top_level_directories or []):
+                    repo_keywords.update(re.findall(r'\b\w+\b', d.lower()))
+                for f in (structure.files or [])[:100]:
+                    base = os.path.basename(f)
+                    name_only = os.path.splitext(base)[0]
+                    repo_keywords.update(re.findall(r'\b\w+\b', name_only.lower()))
+                    
+            if words.intersection(repo_keywords):
+                is_related = True
+
+        if not is_related:
+            return {
+                "answer": "I am designed to answer questions about the selected repository and the intelligence generated by Helix. Please ask a repository-related question.",
+                "confidence": 1.0,
+                "provider": "local",
+                "model": "helix-intercept",
+                "referenced_files": [],
+                "referenced_components": [],
+                "referenced_flows": [],
+                "response_time_ms": 0
+            }
+
+        # 6. Cache Check
         import hashlib
         query_clean = query.strip().lower()
         query_hash = hashlib.sha256(query_clean.encode("utf-8")).hexdigest()
@@ -373,3 +494,45 @@ class ChatService:
             "Only return valid JSON matching this schema. All keys are required."
         )
         return instruction
+
+    @staticmethod
+    def _normalize_query(query: str) -> str:
+        # Convert to lowercase
+        normalized = query.lower().strip()
+        
+        # Strip common punctuation (except slash or hyphen/underscore which might be in code names)
+        import re
+        normalized = re.sub(r'[?.!,;:]', '', normalized)
+        
+        # Remove filler words / prefixes
+        fillers = [
+            "please show me", "can you tell me", "tell me about", "how does", "how do i",
+            "how can we", "what is", "what are", "explain how", "explain what", "explain",
+            "give me details on", "find information about", "where is", "where do we",
+            "how to", "show me", "can you explain", "could you explain"
+        ]
+        for filler in fillers:
+            if normalized.startswith(filler):
+                normalized = normalized[len(filler):].strip()
+                break
+                
+        # Token replacement for abbreviations/synonyms
+        words = normalized.split()
+        synonyms = {
+            "db": "database",
+            "auth": "authentication",
+            "config": "configuration",
+            "repo": "repository",
+            "repos": "repositories",
+            "jwt": "jsonwebtoken",
+            "middleware": "middlewares",
+            "endpoint": "endpoints",
+            "postgres": "postgresql",
+            "pg": "postgresql",
+            "doc": "documentation",
+            "docs": "documentation",
+            "deps": "dependencies",
+            "lib": "library"
+        }
+        normalized_words = [synonyms.get(w, w) for w in words]
+        return " ".join(normalized_words)
