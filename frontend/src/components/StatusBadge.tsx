@@ -42,6 +42,34 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
           Scanning
         </span>
       );
+    case 'SYNCING':
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border border-amber-900/30 bg-amber-950/10 text-amber-400 select-none animate-pulse-subtle">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 animate-ping" />
+          Updating
+        </span>
+      );
+    case 'UP_TO_DATE':
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border border-emerald-900/30 bg-emerald-950/10 text-emerald-400 select-none">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />
+          Up To Date
+        </span>
+      );
+    case 'UPDATES_AVAILABLE':
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border border-gold/30 bg-gold/5 text-gold select-none animate-pulse-subtle">
+          <span className="w-1.5 h-1.5 rounded-full bg-gold mr-1.5" />
+          Updates Available
+        </span>
+      );
+    case 'ANALYZING':
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border border-blue-900/30 bg-blue-950/10 text-blue-400 select-none animate-pulse-subtle">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 animate-ping" />
+          Analyzing
+        </span>
+      );
     default:
       return null;
   }

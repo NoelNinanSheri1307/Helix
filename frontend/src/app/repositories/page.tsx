@@ -6,7 +6,7 @@ import { ErrorModal } from '../../components/ErrorModal';
 import { Repository, RepositoryStatus } from '../../types';
 import { Search, FolderGit, SlidersHorizontal } from 'lucide-react';
 import { useSession } from 'next-auth/react';
-import { getRepositories, deleteRepository, refreshRepository, cloneRepository } from '../../lib/api';
+import { getRepositories, deleteRepository, refreshRepository, cloneRepository, updateRepository } from '../../lib/api';
 
 type FilterStatus = 'All' | RepositoryStatus;
 
@@ -40,12 +40,29 @@ export default function RepositoriesPage() {
 
   const handleClone = async (id: string) => {
     if (!session?.user?.email) return;
-    setRepositories(prev => prev.map(repo => repo.id === id ? { ...repo, status: 'CLONING' } : repo));
-    const result = await cloneRepository(id, session.user.email);
-    const updated = await getRepositories(session.user.email);
-    setRepositories(updated);
-    if (!result.success) {
-      setIsCloneErrorOpen(true);
+    const targetRepo = repositories.find(r => r.id === id);
+    if (!targetRepo) return;
+
+    const email = session.user.email as string;
+
+    if (!targetRepo.currentCommitSha) {
+      setRepositories(prev => prev.map(repo => repo.id === id ? { ...repo, status: 'CLONING' } : repo));
+      const result = await cloneRepository(id, email);
+      const updated = await getRepositories(email);
+      setRepositories(updated);
+      if (!result.success) {
+        setIsCloneErrorOpen(true);
+      }
+    } else {
+      setRepositories(prev => prev.map(repo => repo.id === id ? { ...repo, status: 'SYNCING' } : repo));
+      const updatedRepo = await updateRepository(id, email);
+      if (updatedRepo) {
+        setRepositories(prev => prev.map(repo => repo.id === id ? updatedRepo : repo));
+      } else {
+        alert("Failed to update repository.");
+        const updated = await getRepositories(email);
+        setRepositories(updated);
+      }
     }
   };
 
@@ -67,9 +84,36 @@ export default function RepositoriesPage() {
     fetchRepos();
   }, [session?.user?.email]);
 
+  // Poll status of cloning/syncing repositories
+  useEffect(() => {
+    const activeSync = repositories.some(r => ['CLONING', 'SYNCING', 'ANALYZING'].includes(r.status));
+    if (!activeSync || !session?.user?.email) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const data = await getRepositories(session!.user!.email as string);
+        setRepositories(data);
+      } catch (err) {
+        console.error("Polling repositories failed:", err);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [repositories, session?.user?.email]);
+
   // Filtering list
   const filteredRepos = repositories.filter(repo => {
-    const matchesFilter = filter === 'All' || repo.status === filter;
+    let matchesFilter = false;
+    if (filter === 'All') {
+      matchesFilter = true;
+    } else if (filter === 'READY' || filter === 'CLONED') {
+      matchesFilter = ['READY', 'CLONED', 'UP_TO_DATE', 'UPDATES_AVAILABLE'].includes(repo.status);
+    } else if (filter === 'CLONING') {
+      matchesFilter = ['CLONING', 'SYNCING', 'ANALYZING'].includes(repo.status);
+    } else {
+      matchesFilter = repo.status === filter;
+    }
+
     const matchesSearch = repo.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           (repo.language || '').toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
@@ -77,6 +121,12 @@ export default function RepositoriesPage() {
 
   const getStatusCount = (status: FilterStatus) => {
     if (status === 'All') return repositories.length;
+    if (status === 'READY' || status === 'CLONED') {
+      return repositories.filter(r => ['READY', 'CLONED', 'UP_TO_DATE', 'UPDATES_AVAILABLE'].includes(r.status)).length;
+    }
+    if (status === 'CLONING') {
+      return repositories.filter(r => ['CLONING', 'SYNCING', 'ANALYZING'].includes(r.status)).length;
+    }
     return repositories.filter(r => r.status === status).length;
   };
 

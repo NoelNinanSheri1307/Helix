@@ -87,3 +87,30 @@ def validate_and_fetch_metadata(url: str) -> RepoMetadata:
         default_branch=data.get("default_branch") or "main",
         size_kb=data.get("size", 0),
     )
+
+
+def fetch_latest_commit_sha(owner: str, repo: str, branch: str) -> str:
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    token = os.getenv("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(
+                f"https://api.github.com/repos/{owner}/{repo}/commits/{branch}",
+                headers=headers,
+            )
+    except httpx.RequestError:
+        raise HTTPException(status_code=502, detail="GitHub API Error")
+
+    if response.status_code == 404:
+        raise HTTPException(
+            status_code=404,
+            detail="Repository or branch does not exist",
+        )
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail="GitHub API Error")
+
+    return response.json()["sha"]

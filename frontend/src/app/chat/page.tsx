@@ -1,5 +1,5 @@
 "use client";
- 
+
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -9,11 +9,11 @@ import {
   Workflow, Cpu, ShieldAlert, CheckCircle, Trash2, Zap, Hourglass, HelpCircle, Copy
 } from 'lucide-react';
 import {
-  getRepositories, repositoryChat, ChatResponse, getRepositoryMemory
+  getRepositories, repositoryChat, ChatResponse, getRepositoryMemory, updateRepository
 } from '../../lib/api';
 import { Repository } from '../../types';
 import { HelixResourceDialog } from '../../components/HelixResourceDialog';
- 
+
 interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant';
@@ -29,12 +29,12 @@ interface ChatMessage {
     response_time_ms: number;
   };
 }
- 
+
 export default function ChatPage() {
   const { data: session } = useSession();
   const user = session?.user;
   const router = useRouter();
- 
+
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState<string>('');
   const [loadingRepos, setLoadingRepos] = useState(true);
@@ -47,6 +47,8 @@ export default function ChatPage() {
   const [limitDetail, setLimitDetail] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [atlasDialogOpen, setAtlasDialogOpen] = useState(false);
+
+  const activeRepo = repositories.find(r => r.id === selectedRepoId);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -80,7 +82,7 @@ export default function ChatPage() {
       setLoadingRepos(true);
       getRepositories(user.email)
         .then(list => {
-          const cloned = list.filter(r => r.status === 'CLONED');
+          const cloned = list.filter(r => ['CLONED', 'READY', 'UP_TO_DATE', 'UPDATES_AVAILABLE'].includes(r.status));
           setRepositories(cloned);
           if (cloned.length > 0) {
             setSelectedRepoId(cloned[0].id);
@@ -93,6 +95,35 @@ export default function ChatPage() {
         .finally(() => setLoadingRepos(false));
     }
   }, [user?.email]);
+
+  // Poll repositories status if any of them is SYNCING, ANALYZING, or CLONING
+  useEffect(() => {
+    const activeSync = repositories.some(r => ['SYNCING', 'ANALYZING', 'CLONING'].includes(r.status));
+    if (!activeSync || !user?.email) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const list = await getRepositories(user.email as string);
+        const cloned = list.filter(r => ['CLONED', 'READY', 'UP_TO_DATE', 'UPDATES_AVAILABLE', 'SYNCING', 'ANALYZING'].includes(r.status));
+        setRepositories(cloned);
+      } catch (err) {
+        console.error('Failed to poll repository status:', err);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [repositories, user?.email]);
+
+  const handleUpdateRepo = async (id: string) => {
+    if (!user?.email) return;
+    setRepositories(prev => prev.map(repo => repo.id === id ? { ...repo, status: 'SYNCING' } : repo));
+    const updated = await updateRepository(id, user.email as string);
+    if (updated) {
+      setRepositories(prev => prev.map(repo => repo.id === id ? updated : repo));
+    } else {
+      alert("Failed to update repository.");
+    }
+  };
 
   // Load chat history from localStorage for selected repository on change
   useEffect(() => {
@@ -319,6 +350,32 @@ export default function ChatPage() {
 
       {/* Messages Pane */}
       <div className="flex-1 bg-zinc-950/20 border border-zinc-900 rounded-lg overflow-hidden flex flex-col min-h-0">
+        {activeRepo?.status === 'UPDATES_AVAILABLE' && (
+          <div className="bg-gold/10 border-b border-gold/20 px-4 py-2.5 flex items-center justify-between text-xs text-gold">
+            <div className="flex items-center gap-2">
+              <ShieldAlert size={14} className="animate-pulse flex-shrink-0" />
+              <span>This repository has newer commits available. Updating the repository will regenerate Code Atlas and improve response accuracy.</span>
+            </div>
+            <button
+              onClick={() => handleUpdateRepo(activeRepo.id)}
+              className="px-2.5 py-1 rounded bg-gold/10 hover:bg-gold/20 text-gold text-[10px] font-mono border border-gold/30 hover:border-gold transition-all flex-shrink-0 cursor-pointer"
+            >
+              Update Now
+            </button>
+          </div>
+        )}
+        {activeRepo?.status === 'SYNCING' && (
+          <div className="bg-blue-500/10 border-b border-blue-500/20 px-4 py-2.5 flex items-center gap-2 text-xs text-blue-400">
+            <RefreshCw size={14} className="animate-spin flex-shrink-0" />
+            <span>Updating repository... Fetching changes from GitHub and rebuilding codebase blueprints.</span>
+          </div>
+        )}
+        {activeRepo?.status === 'ANALYZING' && (
+          <div className="bg-blue-500/10 border-b border-blue-500/20 px-4 py-2.5 flex items-center gap-2 text-xs text-blue-400">
+            <Brain size={14} className="animate-pulse flex-shrink-0" />
+            <span>Analyzing repository... Rebuilding Knowledge Graph, Call Graph and Code Atlas.</span>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-800">
           {messages.map((msg) => (
             <div
@@ -492,7 +549,7 @@ export default function ChatPage() {
               <div className="max-w-[85%] rounded-lg px-4 py-3.5 bg-zinc-950/60 border border-zinc-900 space-y-2 flex items-center gap-3">
                 <Hourglass className="animate-spin text-gold" size={14} />
                 <span className="text-xs text-zinc-500 font-mono animate-pulse">
-                  {mode === 'analyze' ? 'Running deep architectural analysis...' : 'Assembling context & retrieving answer...'}
+                  {mode === 'analyze' ? 'Running deep architectural analysis...' : 'Assembling context & retrieving answer...(may take a minute)'}
                 </span>
               </div>
             </div>
@@ -597,7 +654,7 @@ export default function ChatPage() {
                 <Brain size={20} className="text-gold" />
                 <span className="text-[10px] font-mono uppercase tracking-widest">Helix Protocol</span>
               </div>
-              
+
               <div className="space-y-2">
                 <h2 className="text-base font-serif-display font-medium text-ivory tracking-tight">
                   Code Atlas Index Required

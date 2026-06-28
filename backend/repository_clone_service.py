@@ -134,10 +134,43 @@ class RepositoryCloneService:
             except Exception as ast_exc:
                 logger.error(f"AST Analysis failed for repository {repository.id}: {ast_exc}", exc_info=True)
 
-            repository.analysis_status = "CLONED"
-            repository.status = "CLONED"
             repository.framework = scan.repository_statistics.get("framework", "Unknown")
             repository.framework_confidence = scan.repository_statistics.get("framework_confidence", 0.0)
+
+            # Extract local Git branch and commit SHA
+            current_branch = "main"
+            current_sha = None
+            try:
+                branch_res = subprocess.run(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                    cwd=str(final_path),
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if branch_res.returncode == 0:
+                    current_branch = branch_res.stdout.strip()
+
+                sha_res = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=str(final_path),
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if sha_res.returncode == 0:
+                    current_sha = sha_res.stdout.strip()
+            except Exception as git_meta_exc:
+                logger.error(f"Failed to fetch git metadata: {git_meta_exc}")
+
+            repository.analysis_status = "READY"
+            repository.status = "READY"
+            repository.current_branch = current_branch
+            repository.current_commit_sha = current_sha
+            repository.latest_github_commit_sha = current_sha
+            repository.last_synced_timestamp = datetime.now(timezone.utc)
+            repository.last_analysis_timestamp = datetime.now(timezone.utc)
+
             self.db.commit()
             
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()

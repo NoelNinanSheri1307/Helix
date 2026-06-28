@@ -31,6 +31,11 @@ class RepositoryResponse(BaseModel):
     framework_confidence: float | None = None
     local_path: str | None = None
     analysis_status: str = "READY"
+    current_branch: str | None = None
+    current_commit_sha: str | None = None
+    latest_github_commit_sha: str | None = None
+    last_synced_timestamp: datetime | None = None
+    last_analysis_timestamp: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -58,6 +58,12 @@ class Repository(Base):
         nullable=True
     )
 
+    current_branch = Column(String, nullable=True)
+    current_commit_sha = Column(String, nullable=True)
+    latest_github_commit_sha = Column(String, nullable=True)
+    last_synced_timestamp = Column(DateTime(timezone=True), nullable=True)
+    last_analysis_timestamp = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now()

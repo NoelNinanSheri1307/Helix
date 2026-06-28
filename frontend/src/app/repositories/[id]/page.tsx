@@ -7,7 +7,7 @@ import { useSession } from 'next-auth/react';
 import { ArrowLeft, Braces, FileCog, Files, FolderTree, GitBranch, Play, Star, FileText, Box, Info, Code, Layers, Workflow, AlertTriangle, AlertCircle, Activity } from 'lucide-react';
 import { DirectoryTree } from '../../../components/DirectoryTree';
 import { StatusBadge } from '../../../components/StatusBadge';
-import { getRepositories, getRepositoryStructure, getRepositoryEntities, getRepositoryGraph, getRepositoryArchitecture, getRepositoryCallGraph, CallGraphData, getRepositoryFlows, ExecutionFlow } from '../../../lib/api';
+import { getRepositories, getRepositoryStructure, getRepositoryEntities, getRepositoryGraph, getRepositoryArchitecture, getRepositoryCallGraph, CallGraphData, getRepositoryFlows, ExecutionFlow, checkRepositoryUpdates, updateRepository } from '../../../lib/api';
 import { Repository, RepositoryStructure, CodeEntity, RepositoryGraph, RepositoryArchitecture } from '../../../types';
 import { KnowledgeGraph } from '../../../components/KnowledgeGraph';
 import { CallGraph } from '../../../components/CallGraph';
@@ -53,7 +53,19 @@ export default function RepositoryDetailsPage() {
         const selected = repositories.find(item => item.id === params.id);
         if (!selected) throw new Error('Repository not found');
         setRepository(selected);
-        if (selected.status === 'CLONED') {
+        let currentRepo = selected;
+        if (['CLONED', 'READY', 'UP_TO_DATE', 'UPDATES_AVAILABLE'].includes(selected.status)) {
+          try {
+            const updated = await checkRepositoryUpdates(selected.id, session.user.email);
+            if (updated) {
+              currentRepo = updated;
+              setRepository(updated);
+            }
+          } catch (checkErr) {
+            console.error('Failed to check repository updates:', checkErr);
+          }
+        }
+        if (['CLONED', 'READY', 'UP_TO_DATE', 'UPDATES_AVAILABLE'].includes(currentRepo.status)) {
           const [structData, entitiesData, graphData, architectureData, callGraphData, flowsData] = await Promise.all([
             getRepositoryStructure(params.id, session.user.email),
             getRepositoryEntities(params.id, session.user.email),

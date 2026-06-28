@@ -7,7 +7,7 @@ import { HelixResourceDialog } from '../../components/HelixResourceDialog';
 import { GitFork, Terminal, Clock, ShieldAlert, Plus, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { getRepositories, submitRepository, deleteRepository, refreshRepository, cloneRepository } from '../../lib/api';
+import { getRepositories, submitRepository, deleteRepository, refreshRepository, cloneRepository, updateRepository } from '../../lib/api';
 import { Repository } from '../../types';
 
 export default function DashboardPage() {
@@ -44,12 +44,29 @@ export default function DashboardPage() {
 
   const handleClone = async (id: string) => {
     if (!session?.user?.email) return;
-    setRepositories(prev => prev.map(repo => repo.id === id ? { ...repo, status: 'CLONING' } : repo));
-    const result = await cloneRepository(id, session.user.email);
-    const updated = await getRepositories(session.user.email);
-    setRepositories(updated);
-    if (!result.success) {
-      setIsCloneErrorOpen(true);
+    const targetRepo = repositories.find(r => r.id === id);
+    if (!targetRepo) return;
+
+    const email = session.user.email as string;
+
+    if (!targetRepo.currentCommitSha) {
+      setRepositories(prev => prev.map(repo => repo.id === id ? { ...repo, status: 'CLONING' } : repo));
+      const result = await cloneRepository(id, email);
+      const updated = await getRepositories(email);
+      setRepositories(updated);
+      if (!result.success) {
+        setIsCloneErrorOpen(true);
+      }
+    } else {
+      setRepositories(prev => prev.map(repo => repo.id === id ? { ...repo, status: 'SYNCING' } : repo));
+      const updatedRepo = await updateRepository(id, email);
+      if (updatedRepo) {
+        setRepositories(prev => prev.map(repo => repo.id === id ? updatedRepo : repo));
+      } else {
+        alert("Failed to update repository.");
+        const updated = await getRepositories(email);
+        setRepositories(updated);
+      }
     }
   };
 
@@ -70,6 +87,23 @@ export default function DashboardPage() {
     };
     fetchRepos();
   }, [session?.user?.email]);
+
+  // Poll status of cloning/syncing repositories
+  useEffect(() => {
+    const activeSync = repositories.some(r => ['CLONING', 'SYNCING', 'ANALYZING'].includes(r.status));
+    if (!activeSync || !session?.user?.email) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const data = await getRepositories(session!.user!.email as string);
+        setRepositories(data);
+      } catch (err) {
+        console.error("Polling repositories failed:", err);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [repositories, session?.user?.email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

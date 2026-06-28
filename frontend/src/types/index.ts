@@ -1,4 +1,4 @@
-export type RepositoryStatus = 'READY' | 'CLONING' | 'CLONED' | 'FAILED' | 'SCANNING';
+export type RepositoryStatus = 'READY' | 'CLONING' | 'CLONED' | 'FAILED' | 'SCANNING' | 'SYNCING' | 'UP_TO_DATE' | 'UPDATES_AVAILABLE' | 'ANALYZING';
 
 export interface Repository {
   id: string;
@@ -20,6 +20,12 @@ export interface Repository {
 
   framework: string | null;
   frameworkConfidence: number | null;
+
+  currentBranch: string | null;
+  currentCommitSha: string | null;
+  latestGithubCommitSha: string | null;
+  lastSyncedTimestamp: string | null;
+  lastAnalysisTimestamp: string | null;
 }
 
 export interface RepositoryStructure {

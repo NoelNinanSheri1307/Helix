@@ -22,8 +22,14 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repository, onDelete, onRefr
   const getBorderClass = (status: Repository['status']) => {
     switch (status) {
       case 'CLONED':
+      case 'READY':
+      case 'UP_TO_DATE':
         return 'border-gold-subtle';
+      case 'UPDATES_AVAILABLE':
+        return 'border-yellow-900/40 bg-gold/5';
       case 'CLONING':
+      case 'SYNCING':
+      case 'ANALYZING':
         return 'border-blue-subtle';
       case 'FAILED':
         return 'border-purple-subtle';
@@ -67,7 +73,7 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repository, onDelete, onRefr
     }
   };
 
-  const cloneInProgress = isCloning || repository.status === 'CLONING';
+  const cloneInProgress = isCloning || ['CLONING', 'SYNCING', 'ANALYZING'].includes(repository.status);
 
   const formatStars = (stars?: number | null) => {
     if (stars === null || stars === undefined) return '0 stars';
@@ -131,7 +137,7 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repository, onDelete, onRefr
           </div>
           <div className="flex items-center gap-1.5 min-w-0">
             <GitBranch size={13} className="text-zinc-600 flex-shrink-0" />
-            <span className="truncate" title={displayBranch}>{displayBranch}</span>
+            <span className="truncate" title={repository.currentBranch ?? displayBranch}>{repository.currentBranch ?? displayBranch}</span>
           </div>
           <div className="flex items-center gap-1.5 min-w-0">
             <Terminal size={13} className="text-zinc-600 flex-shrink-0" />
@@ -141,6 +147,27 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repository, onDelete, onRefr
             <GitFork size={13} className="text-zinc-600 flex-shrink-0" />
             <span className="truncate" title={`${repository.forks ?? 0} forks`}>{repository.forks ?? 0} forks</span>
           </div>
+          {repository.currentCommitSha && (
+            <div className="flex items-center gap-1.5 min-w-0 col-span-2 text-zinc-500">
+              <span className="text-zinc-600 font-medium">Commit:</span>
+              <span className="font-mono text-zinc-400 truncate" title={repository.currentCommitSha}>
+                {repository.currentCommitSha.substring(0, 7)}
+              </span>
+            </div>
+          )}
+          {repository.lastSyncedTimestamp && (
+            <div className="flex items-center gap-1.5 min-w-0 col-span-2 text-zinc-500">
+              <span className="text-zinc-600 font-medium">Synced:</span>
+              <span className="text-zinc-400 truncate" title={new Date(repository.lastSyncedTimestamp).toLocaleString()}>
+                {new Date(repository.lastSyncedTimestamp).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -168,14 +195,35 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repository, onDelete, onRefr
             </button>
           )}
           {onClone && (
-            <button
-              onClick={handleClone}
-              className="text-zinc-500 hover:text-emerald-400 p-1.5 rounded border border-zinc-900 hover:border-zinc-850 hover:bg-zinc-900/50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-wait"
-              title={repository.status === 'CLONED' ? "Clone repository again" : "Clone repository"}
-              disabled={cloneInProgress}
-            >
-              {cloneInProgress ? <LoaderCircle size={13} className="animate-spin" /> : <Download size={13} />}
-            </button>
+            !repository.currentCommitSha ? (
+              <button
+                onClick={handleClone}
+                disabled={cloneInProgress}
+                className="text-zinc-500 hover:text-emerald-400 p-1.5 rounded border border-zinc-900 hover:border-zinc-850 hover:bg-zinc-900/50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-1"
+                title="Clone repository"
+              >
+                {cloneInProgress ? <LoaderCircle size={13} className="animate-spin" /> : <Download size={13} />}
+                <span className="text-[11px] font-mono-ui">Clone</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleClone}
+                disabled={cloneInProgress}
+                className={`p-1.5 rounded border cursor-pointer disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-1 transition-all ${
+                  repository.status === 'UPDATES_AVAILABLE'
+                    ? 'border-gold/45 bg-gold/10 text-gold hover:bg-gold/20 shadow-[0_0_10px_rgba(212,175,55,0.2)] animate-pulse'
+                    : 'text-zinc-500 hover:text-emerald-400 border-zinc-900 hover:border-zinc-850 hover:bg-zinc-900/50'
+                }`}
+                title={repository.status === 'UPDATES_AVAILABLE' ? 'Updates available' : 'Update repository'}
+              >
+                {cloneInProgress ? (
+                  <LoaderCircle size={13} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={13} className={cloneInProgress ? 'animate-spin' : ''} />
+                )}
+                <span className="text-[11px] font-mono-ui">Update</span>
+              </button>
+            )
           )}
           {onDelete && (
             <button

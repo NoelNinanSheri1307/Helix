@@ -21,6 +21,11 @@ export interface BackendRepository {
   analysis_status: string;
   framework?: string | null;
   framework_confidence?: number | null;
+  current_branch?: string | null;
+  current_commit_sha?: string | null;
+  latest_github_commit_sha?: string | null;
+  last_synced_timestamp?: string | null;
+  last_analysis_timestamp?: string | null;
 }
 
 export interface SubmitRepositoryResult {
@@ -99,7 +104,10 @@ export async function submitRepository(
   };
 }
 
-const analysisStatuses = new Set<RepositoryStatus>(['READY', 'CLONING', 'CLONED', 'FAILED', 'SCANNING']);
+const analysisStatuses = new Set<RepositoryStatus>([
+  'READY', 'CLONING', 'CLONED', 'FAILED', 'SCANNING',
+  'SYNCING', 'UP_TO_DATE', 'UPDATES_AVAILABLE', 'ANALYZING'
+]);
 
 export function mapBackendToFrontend(item: BackendRepository): FrontendRepository {
   const hasMetadata = Boolean(item.repository_name);
@@ -148,7 +156,12 @@ export function mapBackendToFrontend(item: BackendRepository): FrontendRepositor
     sizeKb: item.size_kb,
     lastMetadataSync: formattedSyncDate,
     framework: item.framework ?? null,
-    frameworkConfidence: item.framework_confidence ?? null
+    frameworkConfidence: item.framework_confidence ?? null,
+    currentBranch: item.current_branch ?? null,
+    currentCommitSha: item.current_commit_sha ?? null,
+    latestGithubCommitSha: item.latest_github_commit_sha ?? null,
+    lastSyncedTimestamp: item.last_synced_timestamp ?? null,
+    lastAnalysisTimestamp: item.last_analysis_timestamp ?? null
   };
 }
 
@@ -513,5 +526,35 @@ export async function repositoryChat(
     throw new Error(mapApiError(body));
   }
   return body as ChatResponse;
+}
+
+export async function checkRepositoryUpdates(
+  id: string,
+  email: string
+): Promise<FrontendRepository | null> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/check-updates?email=${encodeURIComponent(email)}`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    return null;
+  }
+  const item: BackendRepository = await response.json();
+  return mapBackendToFrontend(item);
+}
+
+export async function updateRepository(
+  id: string,
+  email: string
+): Promise<FrontendRepository | null> {
+  const response = await fetch(
+    `${API_BASE_URL}/repository/${id}/update?email=${encodeURIComponent(email)}`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    return null;
+  }
+  const item: BackendRepository = await response.json();
+  return mapBackendToFrontend(item);
 }
 

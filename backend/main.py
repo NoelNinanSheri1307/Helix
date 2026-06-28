@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -44,17 +44,17 @@ async def lifespan(app: FastAPI):
     # Startup event: cleanup repositories stuck in CLONING
     db = next(get_db())
     try:
-        stuck_repos = db.query(Repository).filter(Repository.analysis_status == "CLONING").all()
+        stuck_repos = db.query(Repository).filter(Repository.analysis_status.in_(["CLONING", "SYNCING", "ANALYZING"])).all()
         if stuck_repos:
             for repo in stuck_repos:
                 repo.analysis_status = "FAILED"
                 repo.status = "FAILED"
-                logger.warning(f"Repository ID {repo.id} was found in CLONING status during startup, marking as FAILED.")
+                logger.warning(f"Repository ID {repo.id} was found in {repo.analysis_status} status during startup, marking as FAILED.")
             db.commit()
 
         # Trigger execution flow discovery for already-cloned repos if they don't have flows yet
         from execution_flow_service import ExecutionFlowService
-        cloned_repos = db.query(Repository).filter(Repository.analysis_status == "CLONED").all()
+        cloned_repos = db.query(Repository).filter(Repository.analysis_status.in_(["READY", "CLONED", "UP_TO_DATE", "UPDATES_AVAILABLE"])).all()
         for repo in cloned_repos:
             has_flows = db.query(ExecutionFlow).filter(ExecutionFlow.repository_id == repo.id).first() is not None
             if not has_flows:
@@ -370,10 +370,10 @@ def get_repository_structure(
     db: Session = Depends(get_db),
 ):
     repository = get_owned_repository(id, email, db)
-    if repository.analysis_status != "CLONED":
+    if repository.analysis_status not in ["READY", "CLONED", "UP_TO_DATE", "UPDATES_AVAILABLE"]:
         raise HTTPException(
             status_code=409,
-            detail="Repository has not been cloned",
+            detail="Repository is not ready or has not been cloned",
         )
 
     structure = (
@@ -898,6 +898,195 @@ def repository_chat(
     repository = get_owned_repository(id, email, db)
     from chat_service import ChatService
     return ChatService.chat(db, repository.id, payload.message, email, payload.mode)
+
+
+import os
+
+@app.post(
+    "/repository/{id}/check-updates",
+    response_model=RepositoryResponse,
+)
+def check_repository_updates(
+    id: int,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    from github_service import parse_github_url, fetch_latest_commit_sha
+    try:
+        owner, repo_name, _ = parse_github_url(repository.github_url)
+        branch = repository.current_branch or repository.default_branch or "main"
+        latest_sha = fetch_latest_commit_sha(owner, repo_name, branch)
+        
+        repository.latest_github_commit_sha = latest_sha
+        repository.last_synced_timestamp = datetime.now(timezone.utc)
+        
+        if repository.current_commit_sha == latest_sha:
+            repository.analysis_status = "UP_TO_DATE"
+            repository.status = "UP_TO_DATE"
+        else:
+            repository.analysis_status = "UPDATES_AVAILABLE"
+            repository.status = "UPDATES_AVAILABLE"
+            
+        db.commit()
+        db.refresh(repository)
+    except Exception as e:
+        logger.error(f"Failed to check updates for repository {id}: {e}")
+    return repository
+
+
+@app.post(
+    "/repository/{id}/update",
+    response_model=RepositoryResponse,
+)
+def update_repository(
+    id: int,
+    email: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    repository = get_owned_repository(id, email, db)
+    
+    # Run sync fetch check synchronously first. If already up to date, return immediately!
+    import subprocess
+    local_path = repository.local_path
+    if local_path and os.path.exists(local_path):
+        try:
+            subprocess.run(["git", "fetch"], cwd=local_path, capture_output=True, text=True, timeout=10.0)
+            branch = repository.current_branch or "main"
+            remote_sha_res = subprocess.run(
+                ["git", "rev-parse", f"origin/{branch}"],
+                cwd=local_path,
+                capture_output=True,
+                text=True,
+                timeout=10.0
+            )
+            remote_sha = remote_sha_res.stdout.strip()
+            if remote_sha and remote_sha == repository.current_commit_sha:
+                repository.analysis_status = "UP_TO_DATE"
+                repository.status = "UP_TO_DATE"
+                repository.latest_github_commit_sha = remote_sha
+                repository.last_synced_timestamp = datetime.now(timezone.utc)
+                db.commit()
+                db.refresh(repository)
+                return repository
+        except Exception as fetch_exc:
+            logger.error(f"Fetch pre-check failed: {fetch_exc}")
+
+    # Set status to SYNCING
+    repository.analysis_status = "SYNCING"
+    repository.status = "SYNCING"
+    db.commit()
+    db.refresh(repository)
+    
+    background_tasks.add_task(
+        run_repository_update_pipeline, repository.id, email
+    )
+    return repository
+
+
+def run_repository_update_pipeline(repository_id: int, email: str):
+    from database import get_db
+    import subprocess
+    db = next(get_db())
+    
+    try:
+        from models import Repository, RepositoryStructure, CodeEntity, KnowledgeNode, KnowledgeEdge, ExecutionFlow, RepositoryArchitecture, OnboardingDocument, RepositoryMemory, RepositoryEmbedding, ChatCache
+        repository = db.query(Repository).filter(Repository.id == repository_id).first()
+        if not repository:
+            return
+            
+        logger.info(f"Starting update pipeline for repository {repository_id}...")
+        
+        # 1. git pull
+        local_path = repository.local_path
+        pull_res = subprocess.run(["git", "pull"], cwd=local_path, capture_output=True, text=True, timeout=60.0)
+        if pull_res.returncode != 0:
+            raise RuntimeError(f"git pull failed: {pull_res.stderr}")
+            
+        # Get new SHA
+        sha_res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=local_path, capture_output=True, text=True)
+        new_sha = sha_res.stdout.strip() if sha_res.returncode == 0 else repository.current_commit_sha
+        
+        repository.current_commit_sha = new_sha
+        repository.latest_github_commit_sha = new_sha
+        repository.last_synced_timestamp = datetime.now(timezone.utc)
+        
+        # 2. Update status to ANALYZING
+        repository.analysis_status = "ANALYZING"
+        repository.status = "ANALYZING"
+        db.commit()
+        
+        # 3. Clear old analysis data
+        db.query(CodeEntity).filter(CodeEntity.repository_id == repository_id).delete()
+        db.query(KnowledgeNode).filter(KnowledgeNode.repository_id == repository_id).delete()
+        db.query(KnowledgeEdge).filter(KnowledgeEdge.repository_id == repository_id).delete()
+        db.query(ExecutionFlow).filter(ExecutionFlow.repository_id == repository_id).delete()
+        db.query(RepositoryArchitecture).filter(RepositoryArchitecture.repository_id == repository_id).delete()
+        db.query(OnboardingDocument).filter(OnboardingDocument.repository_id == repository_id).delete()
+        db.query(RepositoryMemory).filter(RepositoryMemory.repository_id == repository_id).delete()
+        db.query(RepositoryEmbedding).filter(RepositoryEmbedding.repository_id == repository_id).delete()
+        db.query(ChatCache).filter(ChatCache.repository_id == repository_id).delete()
+        db.commit()
+        
+        # 4. Refresh structure scan
+        from repository_scanner import RepositoryStructureScanner
+        scanner = RepositoryStructureScanner()
+        scan = scanner.scan(local_path)
+        
+        # Save scan
+        from repository_clone_service import RepositoryCloneService
+        clone_service = RepositoryCloneService(db)
+        clone_service._store_scan(repository.id, scan)
+        
+        repository.framework = scan.repository_statistics.get("framework", "Unknown")
+        repository.framework_confidence = scan.repository_statistics.get("framework_confidence", 0.0)
+        db.commit()
+        
+        # 5. Re-run AST analysis
+        from ast_analyzer import ASTAnalysisService
+        ASTAnalysisService.analyze_repository(db, repository.id, local_path)
+        
+        # 6. Rebuild Knowledge Graph & Call Graph
+        from graph_service import KnowledgeGraphService
+        KnowledgeGraphService.generate_graph(db, repository.id)
+        
+        # 7. Recompute Execution Flows
+        from execution_flow_service import ExecutionFlowService
+        ExecutionFlowService.discover_flows(db, repository.id)
+        
+        # 8. Recompute Architecture Intelligence
+        from architecture_service import ArchitectureService
+        ArchitectureService.generate_architecture(db, repository.id)
+        
+        # 9. Regenerate Code Atlas & Onboarding Document
+        from onboarding_service import OnboardingService
+        OnboardingService.generate_onboarding(db, repository.id)
+        
+        # 10. Regenerate Repository Memory & Embeddings
+        from repository_memory_service import RepositoryMemoryService
+        RepositoryMemoryService.generate_snapshot(db, repository.id)
+        
+        # 11. Finalize: Status = READY
+        repository.analysis_status = "READY"
+        repository.status = "READY"
+        repository.last_analysis_timestamp = datetime.now(timezone.utc)
+        db.commit()
+        
+        logger.info(f"Update pipeline completed successfully for repository {repository_id}!")
+        
+    except Exception as exc:
+        logger.error(f"Update pipeline failed for repository {repository_id}: {exc}", exc_info=True)
+        try:
+            repository = db.query(Repository).filter(Repository.id == repository_id).first()
+            if repository:
+                repository.analysis_status = "FAILED"
+                repository.status = "FAILED"
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
 
 
 
