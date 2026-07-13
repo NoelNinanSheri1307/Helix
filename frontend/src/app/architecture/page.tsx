@@ -15,37 +15,67 @@ export default function ArchitectureCrossPage() {
   const [architectures, setArchitectures] = useState<Record<string, RepositoryArchitecture>>({});
   const [loading, setLoading] = useState(true);
 
+  const fetchArchitectureData = async () => {
+    if (!user?.email) return;
+    try {
+      const list = await getRepositories(user.email);
+      setRepositories(list);
+
+      // Fetch architecture info for all repositories in parallel
+      const archPromises = list.map(async repo => {
+        try {
+          const arch = await getRepositoryArchitecture(repo.id, user.email!);
+          return { repoId: repo.id, arch };
+        } catch (err) {
+          return { repoId: repo.id, arch: null };
+        }
+      });
+
+      const results = await Promise.all(archPromises);
+      const archMap: Record<string, RepositoryArchitecture> = {};
+      results.forEach(res => {
+        if (res.arch) {
+          archMap[res.repoId] = res.arch;
+        }
+      });
+      setArchitectures(archMap);
+    } catch (err) {
+      console.error("Error loading architecture metrics", err);
+    }
+  };
+
   useEffect(() => {
     if (user?.email) {
       setLoading(true);
-      getRepositories(user.email)
-        .then(async list => {
-          const cloned = list.filter(r => r.status === 'CLONED');
-          setRepositories(cloned);
-
-          // Fetch architecture info for all cloned repositories in parallel
-          const archPromises = cloned.map(async repo => {
-            try {
-              const arch = await getRepositoryArchitecture(repo.id, user.email!);
-              return { repoId: repo.id, arch };
-            } catch (err) {
-              return { repoId: repo.id, arch: null };
-            }
-          });
-
-          const results = await Promise.all(archPromises);
-          const archMap: Record<string, RepositoryArchitecture> = {};
-          results.forEach(res => {
-            if (res.arch) {
-              archMap[res.repoId] = res.arch;
-            }
-          });
-          setArchitectures(archMap);
-        })
-        .catch(err => console.error("Error loading architecture metrics", err))
-        .finally(() => setLoading(false));
+      fetchArchitectureData().finally(() => setLoading(false));
     }
   }, [user?.email]);
+
+  // Poll status of cloning/syncing repositories to refresh list in real-time
+  useEffect(() => {
+    const activeSync = repositories.some(r => ['CLONING', 'SYNCING', 'ANALYZING'].includes(r.status));
+    if (!activeSync || !user?.email) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const list = await getRepositories(user.email as string);
+        const statusChanged = list.some(repo => {
+          const prev = repositories.find(r => r.id === repo.id);
+          return prev && prev.status !== repo.status;
+        });
+
+        if (statusChanged) {
+          await fetchArchitectureData();
+        } else {
+          setRepositories(list);
+        }
+      } catch (err) {
+        console.error("Polling repositories failed:", err);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [repositories, user?.email]);
 
   // Aggregate stats
   const totalRepos = repositories.length;

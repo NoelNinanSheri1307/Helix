@@ -18,8 +18,9 @@ export function useUserSync() {
 
     const syncUser = async () => {
       try {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         await fetch(
-          "http://localhost:8000/users/sync",
+          `${baseUrl}/users/sync`,
           {
             method: "POST",
             headers: {

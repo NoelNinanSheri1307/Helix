@@ -30,9 +30,12 @@ class RepositoryCloneService:
         constraints: RepositoryAnalysisConstraints | None = None,
     ):
         self.db = db
-        self.storage_root = (
-            storage_root or Path(__file__).resolve().parent.parent / "storage" / "repositories"
-        ).resolve()
+        env_storage_path = os.getenv("REPOSITORY_STORAGE_PATH")
+        if env_storage_path:
+            resolved_root = Path(env_storage_path)
+        else:
+            resolved_root = storage_root or Path(__file__).resolve().parent.parent / "storage" / "repositories"
+        self.storage_root = resolved_root.resolve()
         self.constraints = constraints or RepositoryAnalysisConstraints()
         self.scanner = RepositoryStructureScanner(self.constraints)
 

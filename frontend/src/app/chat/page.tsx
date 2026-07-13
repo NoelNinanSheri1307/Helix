@@ -82,10 +82,9 @@ export default function ChatPage() {
       setLoadingRepos(true);
       getRepositories(user.email)
         .then(list => {
-          const cloned = list.filter(r => ['CLONED', 'READY', 'UP_TO_DATE', 'UPDATES_AVAILABLE'].includes(r.status));
-          setRepositories(cloned);
-          if (cloned.length > 0) {
-            setSelectedRepoId(cloned[0].id);
+          setRepositories(list);
+          if (list.length > 0) {
+            setSelectedRepoId(list[0].id);
           }
         })
         .catch(err => {
@@ -104,8 +103,7 @@ export default function ChatPage() {
     const interval = setInterval(async () => {
       try {
         const list = await getRepositories(user.email as string);
-        const cloned = list.filter(r => ['CLONED', 'READY', 'UP_TO_DATE', 'UPDATES_AVAILABLE', 'SYNCING', 'ANALYZING'].includes(r.status));
-        setRepositories(cloned);
+        setRepositories(list);
       } catch (err) {
         console.error('Failed to poll repository status:', err);
       }

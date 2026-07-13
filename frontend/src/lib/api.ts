@@ -34,7 +34,7 @@ export interface SubmitRepositoryResult {
   error?: string;
 }
 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const ERROR_MESSAGES: Record<string, string> = {
   "Invalid GitHub repository URL": "Invalid URL",

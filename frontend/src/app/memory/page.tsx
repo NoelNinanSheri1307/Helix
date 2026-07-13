@@ -76,8 +76,7 @@ export default function MemoryPage() {
     if (user?.email) {
       getRepositories(user.email)
         .then(list => {
-          const cloned = list.filter(r => r.status === 'CLONED');
-          setRepositories(cloned);
+          setRepositories(list);
           
           if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
@@ -87,18 +86,36 @@ export default function MemoryPage() {
             if (searchParam) {
               setSearchQuery(searchParam);
             }
-            if (repoParam && cloned.some(r => r.id === repoParam)) {
+            if (repoParam && list.some(r => r.id === repoParam)) {
               setSelectedRepoId(repoParam);
-            } else if (cloned.length > 0) {
-              setSelectedRepoId(cloned[0].id);
+            } else if (list.length > 0) {
+              setSelectedRepoId(list[0].id);
             }
-          } else if (cloned.length > 0) {
-            setSelectedRepoId(cloned[0].id);
+          } else if (list.length > 0) {
+            setSelectedRepoId(list[0].id);
           }
         })
-        .catch(err => console.error(err));
+        .catch(err => console.error("Error loading repositories", err));
     }
   }, [user?.email]);
+
+  // Poll status of cloning/syncing repositories to refresh list in real-time
+  useEffect(() => {
+    const activeSync = repositories.some(r => ['CLONING', 'SYNCING', 'ANALYZING'].includes(r.status));
+    if (!activeSync || !user?.email) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const list = await getRepositories(user.email as string);
+        setRepositories(list);
+      } catch (err) {
+        console.error("Polling repositories failed:", err);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [repositories, user?.email]);
+
 
   // Load memory when repo changes
   useEffect(() => {

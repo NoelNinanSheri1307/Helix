@@ -21,31 +21,61 @@ export default function FlowsCrossPage() {
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
 
+  const fetchFlowsData = async () => {
+    if (!user?.email) return;
+    try {
+      const list = await getRepositories(user.email);
+      setRepositories(list);
+
+      const flowPromises = list.map(async repo => {
+        try {
+          const repoFlows = await getRepositoryFlows(repo.id, user.email!);
+          return repoFlows.map(f => ({ ...f, repoName: repo.name }));
+        } catch (err) {
+          return [];
+        }
+      });
+
+      const results = await Promise.all(flowPromises);
+      const aggregated = results.flat();
+      setAllFlows(aggregated);
+    } catch (err) {
+      console.error("Error loading behavior flows", err);
+    }
+  };
+
   useEffect(() => {
     if (user?.email) {
       setLoading(true);
-      getRepositories(user.email)
-        .then(async list => {
-          const cloned = list.filter(r => r.status === 'CLONED');
-          setRepositories(cloned);
-
-          const flowPromises = cloned.map(async repo => {
-            try {
-              const repoFlows = await getRepositoryFlows(repo.id, user.email!);
-              return repoFlows.map(f => ({ ...f, repoName: repo.name }));
-            } catch (err) {
-              return [];
-            }
-          });
-
-          const results = await Promise.all(flowPromises);
-          const aggregated = results.flat();
-          setAllFlows(aggregated);
-        })
-        .catch(err => console.error("Error loading behavior flows", err))
-        .finally(() => setLoading(false));
+      fetchFlowsData().finally(() => setLoading(false));
     }
   }, [user?.email]);
+
+  // Poll status of cloning/syncing repositories to refresh list in real-time
+  useEffect(() => {
+    const activeSync = repositories.some(r => ['CLONING', 'SYNCING', 'ANALYZING'].includes(r.status));
+    if (!activeSync || !user?.email) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const list = await getRepositories(user.email as string);
+        const statusChanged = list.some(repo => {
+          const prev = repositories.find(r => r.id === repo.id);
+          return prev && prev.status !== repo.status;
+        });
+
+        if (statusChanged) {
+          await fetchFlowsData();
+        } else {
+          setRepositories(list);
+        }
+      } catch (err) {
+        console.error("Polling repositories failed:", err);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [repositories, user?.email]);
 
   const flowTypes = useMemo(() => {
     return Array.from(new Set(allFlows.map(f => f.flow_type))).sort();
