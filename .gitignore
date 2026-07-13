@@ -45,3 +45,10 @@ __pycache__/
 
 venv/
 backend/venv/
+
+# Deployment additions
+repositories/
+storage/
+.next/
+frontend/.next/
+*.env.local
