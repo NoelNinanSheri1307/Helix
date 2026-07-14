@@ -2,6 +2,7 @@
 
 import { SessionProvider } from "next-auth/react";
 import { SidebarProvider } from "../context/SidebarContext";
+import { DemoNoticeProvider } from "../context/DemoNoticeContext";
 
 export default function Providers({
   children,
@@ -11,7 +12,9 @@ export default function Providers({
   return (
     <SessionProvider>
       <SidebarProvider>
-        {children}
+        <DemoNoticeProvider>
+          {children}
+        </DemoNoticeProvider>
       </SidebarProvider>
     </SessionProvider>
   );

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Search, ChevronDown, User, LogOut, Settings, Menu } from 'lucide-react';
 import { useSession, signOut } from "next-auth/react";
 import { useSidebar } from '../context/SidebarContext';
+import { useDemoNotice } from '../context/DemoNoticeContext';
 
 export const TopBar: React.FC = () => {
   const pathname = usePathname();
@@ -14,6 +15,7 @@ export const TopBar: React.FC = () => {
   const [imgError, setImgError] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { setMobileOpen } = useSidebar();
+  const { showDemoNotice } = useDemoNotice();
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -52,7 +54,16 @@ export const TopBar: React.FC = () => {
       </div>
 
       {/* Global Actions */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4 md:gap-6">
+        {/* Demo Environment Badge */}
+        <button
+          onClick={showDemoNotice}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 hover:bg-amber-500/20 hover:border-amber-500/40 text-[10px] text-amber-500 font-medium transition-all cursor-pointer select-none"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+          <span>Demo Env</span>
+        </button>
+
         {/* Mock Search Bar */}
         <div className="relative w-64 max-md:hidden">
           <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-zinc-550">
